@@ -9,6 +9,7 @@ from ui.components import WordCard, SRSButtons, ChoiceButtons
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn):
         super().__init__()
+        self.scroll = ft.ScrollMode.AUTO
         self.page_ref = page
         self.srs_data = srs_data
         self.save_srs_data_fn = save_srs_data_fn
@@ -23,42 +24,83 @@ class ReviewTab(ft.Column):
         self.init_ui()
 
     def init_ui(self):
-        # 1. Word Card Component
-        self.word_card = WordCard()
+        # 1. Word Card Component (Truyền callback click lật thẻ)
+        self.word_card = WordCard(on_card_click=self.on_card_click)
         
-        # 2. Reveal Button (for Flashcard mode)
-        self.btn_reveal = ft.Button(
-            "Reveal Answer 🔓", 
-            width=250, 
-            height=45, 
-            color=COLOR_TEXT_PRIMARY, 
-            bgcolor=COLOR_PRIMARY, 
-            on_click=self.on_reveal_click
+        # 2. Dòng chữ hướng dẫn lật thẻ (Chỉ hiện trong chế độ Flashcard khi chưa lật)
+        self.lbl_flashcard_instruction = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Icon(icon=ft.Icons.LIGHTBULB_OUTLINED, color=COLOR_WARNING, size=40),
+                    ft.Text("Nhấn vào thẻ bên trái\nđể xem nghĩa câu 💡", size=16, weight=ft.FontWeight.W_500, text_align=ft.TextAlign.CENTER),
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            width=400,
+            alignment=ft.Alignment(0, 0),
+            visible=False
         )
         
-        # 3. Choice Buttons Component (for Multiple Choice mode)
+        # 3. Choice Buttons Component (Cho chế độ Trắc nghiệm)
         self.choice_buttons = ChoiceButtons(on_choice_click=self.handle_choice_selected)
 
-        # 4. SRS Buttons Component (Feedback ratings)
+        # 4. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
         
-        # 5. Progress UI Components
-        self.progress_bar = ft.ProgressBar(value=0, width=400, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
+        # 5. Khung tương tác bên tay phải (Interaction Panel)
+        self.interaction_panel = ft.Column(
+            controls=[
+                self.lbl_flashcard_instruction,
+                self.choice_buttons,
+                ft.Container(height=10),
+                self.srs_buttons
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            width=420,
+            spacing=10
+        )
+        
+        # 6. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
+        self.main_split_layout = ft.Row(
+            controls=[
+                self.word_card,
+                ft.VerticalDivider(color=COLOR_BORDER, width=20),
+                self.interaction_panel
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=20
+        )
+        
+        # 7. Progress UI Components
+        self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="0/0 Words", size=13, color=COLOR_TEXT_MUTED)
         
         self.controls = [
             ft.Text("Meow-morize Daily Review 🐾", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("Master your vocabulary using Spaced Repetition", size=14, color=COLOR_TEXT_SUBTITLE),
-            ft.Container(height=15),
-            self.word_card,
-            ft.Container(height=15),
-            self.btn_reveal,
-            self.choice_buttons,
-            self.srs_buttons,
-            ft.Container(height=15),
+            ft.Container(height=20),
+            self.main_split_layout,
+            ft.Container(height=20),
             self.progress_bar,
             self.lbl_progress
         ]
+
+    def on_card_click(self, e):
+        # Chỉ xử lý sự kiện click lật thẻ khi đang ở chế độ Flashcard và nghĩa chưa được hiển thị
+        if self.review_mode == "flashcard" and not self.word_card.lbl_translation.visible:
+            if not self.review_queue or self.current_index >= len(self.review_queue):
+                return
+            
+            # Lật thẻ hiển thị nghĩa
+            self.word_card.reveal_translation(True)
+            # Ẩn hướng dẫn ở cột bên phải
+            self.lbl_flashcard_instruction.visible = False
+            self.page_ref.update()
+            
+            # Kích hoạt hiện các nút đánh giá SRS
+            self.setup_srs_ratings()
 
     def build_review_queue(self, vocab_list):
         self.vocab_list = vocab_list
@@ -75,10 +117,10 @@ class ReviewTab(ft.Column):
         # Trộn ngẫu nhiên danh sách ôn tập hôm nay
         random.shuffle(due_words)
         
-        # Giới hạn tối đa 50 từ mỗi ngày để tránh quá tải
+        # Giới hạn tối đa 50 từ mỗi ngày
         self.review_queue = due_words[:50]
         
-        # Gán ngẫu nhiên chế độ câu hỏi (Flashcard hoặc Trắc nghiệm) cho từng thẻ
+        # Gán ngẫu nhiên chế độ câu hỏi cho từng từ
         for item in self.review_queue:
             item["quiz_type"] = random.choice(["flashcard", "multiple_choice"])
                 
@@ -104,7 +146,8 @@ class ReviewTab(ft.Column):
                 context="You have finished all vocab reviews for today.", 
                 translation=""
             )
-            self.btn_reveal.visible = False
+            self.word_card.lbl_hint.visible = False
+            self.lbl_flashcard_instruction.visible = False
             self.choice_buttons.show_choices(False)
             self.progress_bar.value = 1.0
             self.lbl_progress.value = "Completed!"
@@ -125,10 +168,10 @@ class ReviewTab(ft.Column):
             self.review_mode = item.get("quiz_type", "flashcard")
             
             if self.review_mode == "flashcard":
-                self.btn_reveal.visible = True
+                self.lbl_flashcard_instruction.visible = True
                 self.choice_buttons.show_choices(False)
             else:
-                self.btn_reveal.visible = False
+                self.lbl_flashcard_instruction.visible = False
                 self.choice_buttons.show_choices(True)
                 self.setup_choices()
             
@@ -162,14 +205,6 @@ class ReviewTab(ft.Column):
         self.word_card.reveal_translation(True)
         
         # Display SRS rating options
-        self.setup_srs_ratings()
-
-    def on_reveal_click(self, e):
-        if not self.review_queue or self.current_index >= len(self.review_queue):
-            return
-        self.btn_reveal.visible = False
-        self.word_card.reveal_translation(True)
-        
         self.setup_srs_ratings()
 
     def setup_srs_ratings(self):
