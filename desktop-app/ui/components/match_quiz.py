@@ -6,7 +6,7 @@ class MatchQuiz(ft.Column):
         super().__init__()
         self.on_verify = on_verify
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        self.spacing = 15
+        self.spacing = 12
         self.visible = False
         
         self.items = []
@@ -18,24 +18,24 @@ class MatchQuiz(ft.Column):
         self.item_views = []
         
         for i in range(4):
-            lbl_word = ft.Text("Word", size=16, weight=ft.FontWeight.W_500, width=150)
+            lbl_word = ft.Text("Word", size=15, weight=ft.FontWeight.W_500, width=130)
             
-            # Nút chọn Đồng nghĩa
+            # Nút chọn Đồng nghĩa (Không dùng emoji trong text để tránh xuống dòng)
             btn_syn = ft.Button(
-                content=ft.Text("Synonym 🟢"),
+                content=ft.Text("Synonym", size=12),
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_MUTED,
-                width=110,
+                width=100,
                 height=35,
                 on_click=self.make_select_handler(i, "synonym")
             )
             
-            # Nút chọn Trái nghĩa
+            # Nút chọn Trái nghĩa (Không dùng emoji trong text để tránh xuống dòng)
             btn_ant = ft.Button(
-                content=ft.Text("Antonym 🔴"),
+                content=ft.Text("Antonym", size=12),
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_MUTED,
-                width=110,
+                width=100,
                 height=35,
                 on_click=self.make_select_handler(i, "antonym")
             )
@@ -43,7 +43,7 @@ class MatchQuiz(ft.Column):
             row = ft.Row(
                 controls=[lbl_word, btn_syn, btn_ant],
                 alignment=ft.MainAxisAlignment.CENTER,
-                spacing=10
+                spacing=12
             )
             self.rows.append(row)
             self.item_views.append({
