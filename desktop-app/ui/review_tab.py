@@ -4,7 +4,7 @@ import random
 import flet as ft
 from ui.theme import *
 from srs import update_srs_item
-from ui.components import ModeSelector, WordCard, SRSButtons, ChoiceButtons
+from ui.components import WordCard, SRSButtons, ChoiceButtons
 
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn):
@@ -23,16 +23,10 @@ class ReviewTab(ft.Column):
         self.init_ui()
 
     def init_ui(self):
-        # 1. Mode Selector Component
-        self.mode_selector = ModeSelector(
-            initial_mode=self.review_mode, 
-            on_mode_change=self.handle_mode_change
-        )
-
-        # 2. Word Card Component
+        # 1. Word Card Component
         self.word_card = WordCard()
         
-        # 3. Reveal Button (for Flashcard mode)
+        # 2. Reveal Button (for Flashcard mode)
         self.btn_reveal = ft.Button(
             "Reveal Answer 🔓", 
             width=250, 
@@ -42,21 +36,19 @@ class ReviewTab(ft.Column):
             on_click=self.on_reveal_click
         )
         
-        # 4. Choice Buttons Component (for Multiple Choice mode)
+        # 3. Choice Buttons Component (for Multiple Choice mode)
         self.choice_buttons = ChoiceButtons(on_choice_click=self.handle_choice_selected)
 
-        # 5. SRS Buttons Component (Feedback ratings)
+        # 4. SRS Buttons Component (Feedback ratings)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
         
-        # 6. Progress UI Components
+        # 5. Progress UI Components
         self.progress_bar = ft.ProgressBar(value=0, width=400, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="0/0 Words", size=13, color=COLOR_TEXT_MUTED)
         
         self.controls = [
             ft.Text("Meow-morize Daily Review 🐾", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("Master your vocabulary using Spaced Repetition", size=14, color=COLOR_TEXT_SUBTITLE),
-            ft.Container(height=10),
-            self.mode_selector,
             ft.Container(height=15),
             self.word_card,
             ft.Container(height=15),
@@ -68,20 +60,27 @@ class ReviewTab(ft.Column):
             self.lbl_progress
         ]
 
-    def handle_mode_change(self, new_mode):
-        self.review_mode = new_mode
-        self.show_current_card()
-
     def build_review_queue(self, vocab_list):
         self.vocab_list = vocab_list
         self.review_queue = []
         self.current_index = 0
         today = datetime.date.today().isoformat()
         
+        due_words = []
         for item in self.vocab_list:
             word = item["word"]
             if word not in self.srs_data or self.srs_data[word]["next_review"] <= today:
-                self.review_queue.append(item)
+                due_words.append(item)
+                
+        # Trộn ngẫu nhiên danh sách ôn tập hôm nay
+        random.shuffle(due_words)
+        
+        # Giới hạn tối đa 50 từ mỗi ngày để tránh quá tải
+        self.review_queue = due_words[:50]
+        
+        # Gán ngẫu nhiên chế độ câu hỏi (Flashcard hoặc Trắc nghiệm) cho từng thẻ
+        for item in self.review_queue:
+            item["quiz_type"] = random.choice(["flashcard", "multiple_choice"])
                 
         self.update_progress_ui()
         self.show_current_card()
@@ -121,6 +120,9 @@ class ReviewTab(ft.Column):
                 
             self.word_card.set_context(hidden_context)
             self.word_card.set_translation(item["translation"])
+            
+            # Đọc chế độ câu hỏi được gán ngẫu nhiên cho từ này
+            self.review_mode = item.get("quiz_type", "flashcard")
             
             if self.review_mode == "flashcard":
                 self.btn_reveal.visible = True
