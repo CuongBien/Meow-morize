@@ -1,8 +1,10 @@
 import datetime
 import re
+import random
 import flet as ft
 from ui.theme import *
 from srs import update_srs_item
+from ui.components import ModeSelector, WordCard, SRSButtons, ChoiceButtons
 
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn):
@@ -13,6 +15,7 @@ class ReviewTab(ft.Column):
         self.vocab_list = []
         self.review_queue = []
         self.current_index = 0
+        self.review_mode = "flashcard"
         
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         self.alignment = ft.MainAxisAlignment.CENTER
@@ -20,72 +23,55 @@ class ReviewTab(ft.Column):
         self.init_ui()
 
     def init_ui(self):
-        # Review Cards Controls
-        self.card_word = ft.Text(value="Ready", size=36, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-        self.card_context = ft.Text(value="Context", italic=True, size=15, color=COLOR_TEXT_MUTED, text_align=ft.TextAlign.CENTER)
-        self.card_translation = ft.Text(value="Translation", size=20, weight=ft.FontWeight.W_500, color=COLOR_INFO, text_align=ft.TextAlign.CENTER, visible=False)
+        # 1. Mode Selector Component
+        self.mode_selector = ModeSelector(
+            initial_mode=self.review_mode, 
+            on_mode_change=self.handle_mode_change
+        )
+
+        # 2. Word Card Component
+        self.word_card = WordCard()
         
-        self.btn_reveal = ft.Button("Reveal Answer 🔓", width=250, height=45, color=COLOR_TEXT_PRIMARY, bgcolor=COLOR_PRIMARY, on_click=self.on_reveal_click)
+        # 3. Reveal Button (for Flashcard mode)
+        self.btn_reveal = ft.Button(
+            "Reveal Answer 🔓", 
+            width=250, 
+            height=45, 
+            color=COLOR_TEXT_PRIMARY, 
+            bgcolor=COLOR_PRIMARY, 
+            on_click=self.on_reveal_click
+        )
         
-        # Group nút đánh giá chất lượng ghi nhớ
-        self.btn_again = ft.Button("Again ❌ (1d)", bgcolor=COLOR_ERROR_DARK, color=COLOR_TEXT_PRIMARY, visible=False, on_click=self.make_rate_handler(1))
-        self.btn_hard = ft.Button("Hard ⚠️ (2d)", bgcolor=COLOR_WARNING_DARK, color=COLOR_TEXT_PRIMARY, visible=False, on_click=self.make_rate_handler(3))
-        self.btn_good = ft.Button("Good 👍 (4d)", bgcolor=COLOR_INFO_DARK, color=COLOR_TEXT_PRIMARY, visible=False, on_click=self.make_rate_handler(4))
-        self.btn_easy = ft.Button("Easy 🎉 (7d)", bgcolor=COLOR_SUCCESS_DARK, color=COLOR_TEXT_PRIMARY, visible=False, on_click=self.make_rate_handler(5))
+        # 4. Choice Buttons Component (for Multiple Choice mode)
+        self.choice_buttons = ChoiceButtons(on_choice_click=self.handle_choice_selected)
+
+        # 5. SRS Buttons Component (Feedback ratings)
+        self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
         
+        # 6. Progress UI Components
         self.progress_bar = ft.ProgressBar(value=0, width=400, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="0/0 Words", size=13, color=COLOR_TEXT_MUTED)
-        
-        self.review_card = ft.Container(
-            content=ft.Column(
-                controls=[
-                    self.card_word,
-                    ft.Divider(color=COLOR_BORDER),
-                    self.card_context,
-                    ft.Container(height=10),
-                    self.card_translation,
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                alignment=ft.MainAxisAlignment.CENTER
-            ),
-            padding=30,
-            width=550,
-            height=280,
-            border_radius=16,
-            bgcolor=COLOR_BG_CARD,
-            border=ft.Border(
-                top=ft.BorderSide(1, COLOR_BORDER),
-                right=ft.BorderSide(1, COLOR_BORDER),
-                bottom=ft.BorderSide(1, COLOR_BORDER),
-                left=ft.BorderSide(1, COLOR_BORDER)
-            ),
-            alignment=ft.Alignment(0, 0),
-            shadow=ft.BoxShadow(
-                spread_radius=1,
-                blur_radius=15,
-                color=COLOR_SHADOW,
-                offset=ft.Offset(0, 5)
-            )
-        )
         
         self.controls = [
             ft.Text("Meow-morize Daily Review 🐾", size=24, weight=ft.FontWeight.BOLD),
             ft.Text("Master your vocabulary using Spaced Repetition", size=14, color=COLOR_TEXT_SUBTITLE),
+            ft.Container(height=10),
+            self.mode_selector,
             ft.Container(height=15),
-            self.review_card,
+            self.word_card,
             ft.Container(height=15),
             self.btn_reveal,
-            ft.Row(
-                controls=[self.btn_again, self.btn_hard, self.btn_good, self.btn_easy],
-                alignment=ft.MainAxisAlignment.CENTER,
-                spacing=10
-            ),
+            self.choice_buttons,
+            self.srs_buttons,
             ft.Container(height=15),
             self.progress_bar,
             self.lbl_progress
         ]
 
-    # Logic lọc danh sách từ cần ôn hôm nay
+    def handle_mode_change(self, new_mode):
+        self.review_mode = new_mode
+        self.show_current_card()
+
     def build_review_queue(self, vocab_list):
         self.vocab_list = vocab_list
         self.review_queue = []
@@ -94,11 +80,9 @@ class ReviewTab(ft.Column):
         
         for item in self.vocab_list:
             word = item["word"]
-            # Nếu chưa từng ôn (chưa có trong srs_data) hoặc đến hạn ôn (next_review <= today)
             if word not in self.srs_data or self.srs_data[word]["next_review"] <= today:
                 self.review_queue.append(item)
                 
-        # Cập nhật thanh tiến trình
         self.update_progress_ui()
         self.show_current_card()
         
@@ -112,47 +96,84 @@ class ReviewTab(ft.Column):
             self.lbl_progress.value = f"Reviewing: {self.current_index + 1}/{total} words"
 
     def show_current_card(self):
-        # Ẩn đáp án đi
-        self.card_translation.visible = False
-        self.btn_reveal.visible = True
-        self.btn_again.visible = False
-        self.btn_hard.visible = False
-        self.btn_good.visible = False
-        self.btn_easy.visible = False
+        self.word_card.reveal_translation(False)
+        self.srs_buttons.show_buttons(False)
         
         if not self.review_queue or self.current_index >= len(self.review_queue):
-            self.card_word.value = "All Done! 🐱"
-            self.card_context.value = "You have finished all vocab reviews for today."
+            self.word_card.reset_card(
+                word="All Done! 🐱", 
+                context="You have finished all vocab reviews for today.", 
+                translation=""
+            )
             self.btn_reveal.visible = False
+            self.choice_buttons.show_choices(False)
             self.progress_bar.value = 1.0
             self.lbl_progress.value = "Completed!"
         else:
             item = self.review_queue[self.current_index]
-            self.card_word.value = item["word"]
+            self.word_card.set_word(item["word"])
             
-            # Làm mờ từ gốc trong câu ngữ cảnh để tăng hiệu quả nhớ từ
+            # Mask the target word inside the example sentence
             hidden_context = item["context"]
             if item["word"].lower() in hidden_context.lower():
                 insensitive_word = re.compile(re.escape(item["word"]), re.IGNORECASE)
                 hidden_context = insensitive_word.sub("_______", hidden_context)
                 
-            self.card_context.value = hidden_context
-            self.card_translation.value = item["translation"]
+            self.word_card.set_context(hidden_context)
+            self.word_card.set_translation(item["translation"])
+            
+            if self.review_mode == "flashcard":
+                self.btn_reveal.visible = True
+                self.choice_buttons.show_choices(False)
+            else:
+                self.btn_reveal.visible = False
+                self.choice_buttons.show_choices(True)
+                self.setup_choices()
             
         self.page_ref.update()
 
-    # Event click lật thẻ
+    def setup_choices(self):
+        if not self.review_queue or self.current_index >= len(self.review_queue):
+            return
+        
+        current_item = self.review_queue[self.current_index]
+        correct_ans = current_item["translation"]
+        
+        # Gather distinct incorrect translation options
+        other_translations = [
+            item["translation"] for item in self.vocab_list 
+            if item["word"].lower() != current_item["word"].lower() and item["translation"]
+        ]
+        other_translations = list(set(other_translations))
+        
+        while len(other_translations) < 3:
+            other_translations.append("Nghĩa bổ trợ " + str(len(other_translations) + 1))
+            
+        distractors = random.sample(other_translations, 3)
+        choices = [correct_ans] + distractors
+        random.shuffle(choices)
+        
+        self.choice_buttons.set_choices(choices, correct_ans)
+
+    def handle_choice_selected(self, selected_ans, is_correct):
+        # Reveal card answer
+        self.word_card.reveal_translation(True)
+        
+        # Display SRS rating options
+        self.setup_srs_ratings()
+
     def on_reveal_click(self, e):
         if not self.review_queue or self.current_index >= len(self.review_queue):
             return
         self.btn_reveal.visible = False
-        self.card_translation.visible = True
+        self.word_card.reveal_translation(True)
         
-        # Lấy khoảng cách ngày từ SRS để hiển thị trên nút bấm
+        self.setup_srs_ratings()
+
+    def setup_srs_ratings(self):
+        # Calculate intervals
         word = self.review_queue[self.current_index]["word"]
         item_srs = self.srs_data.get(word, {"ease_factor": 2.5, "repetitions": 0, "interval": 1})
-        
-        # Ước lượng khoảng cách ôn tiếp theo để hiển thị trên nhãn nút
         ef = item_srs["ease_factor"]
         rep = item_srs["repetitions"]
         
@@ -163,31 +184,20 @@ class ReviewTab(ft.Column):
         else:
             day_easy = int(round(item_srs["interval"] * ef))
             
-        self.btn_again.text = "Again ❌ (1d)"
-        self.btn_hard.text = f"Hard ⚠️ ({max(1, int(day_easy*0.5))}d)"
-        self.btn_good.text = f"Good 👍 ({max(2, int(day_easy*0.8))}d)"
-        self.btn_easy.text = f"Easy 🎉 ({day_easy}d)"
-        
-        # Hiện các nút đánh giá
-        self.btn_again.visible = True
-        self.btn_hard.visible = True
-        self.btn_good.visible = True
-        self.btn_easy.visible = True
+        self.srs_buttons.set_ratings(day_easy)
+        self.srs_buttons.show_buttons(True)
         self.page_ref.update()
 
-    # Event click đánh giá chất lượng ghi nhớ (SRS)
-    def make_rate_handler(self, quality):
-        def handle_rate(e):
-            if not self.review_queue or self.current_index >= len(self.review_queue):
-                return
-            word = self.review_queue[self.current_index]["word"]
-            
-            # Cập nhật thuật toán SRS
-            self.srs_data = update_srs_item(self.srs_data, word, quality)
-            self.save_srs_data_fn(self.srs_data)
-            
-            # Chuyển sang từ tiếp theo
-            self.current_index += 1
-            self.update_progress_ui()
-            self.show_current_card()
-        return handle_rate
+    def handle_srs_rating(self, quality):
+        if not self.review_queue or self.current_index >= len(self.review_queue):
+            return
+        word = self.review_queue[self.current_index]["word"]
+        
+        # Update spacing schedule
+        self.srs_data = update_srs_item(self.srs_data, word, quality)
+        self.save_srs_data_fn(self.srs_data)
+        
+        # Next card
+        self.current_index += 1
+        self.update_progress_ui()
+        self.show_current_card()
