@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meow-morize - Word Book & Settings</title>
+  <link rel="stylesheet" href="options.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header Navigation -->
+    <header class="app-header">
+      <div class="logo-area">
+        <img src="icons/icon128.png" alt="Meow-morize Logo" class="logo-icon">
+        <span class="logo-text">Meow-morize</span>
+      </div>
+      
+      <nav class="nav-tabs">
+        <a href="#dashboard" class="nav-tab active" id="tab-dashboard">My Word Book</a>
+        <a href="#settings" class="nav-tab" id="tab-settings">Notion Sync</a>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Section 1: Dashboard (Word Book) -->
+      <section id="section-dashboard" class="content-section active">
+        <div class="section-header">
+          <div>
+            <h1>My Word Book</h1>
+            <p class="subtitle">View and manage your vocabulary list saved locally on this browser.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="btn-export-csv">
+              <svg viewBox="0 0 24 24" class="btn-icon"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/></svg>
+              Export CSV
+            </button>
+            <button class="btn btn-danger" id="btn-clear-all">
+              <svg viewBox="0 0 24 24" class="btn-icon"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="search-input-wrapper">
+            <svg viewBox="0 0 24 24" class="search-icon"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="search-vocab" placeholder="Search word, translation, context...">
+          </div>
+          <span class="vocab-count" id="vocab-total">0 words</span>
+        </div>
+
+        <div class="vocab-table-container">
+          <table class="vocab-table">
+            <thead>
+              <tr>
+                <th>Word</th>
+                <th>Translation</th>
+                <th>Context</th>
+                <th>Source</th>
+                <th style="width: 80px; text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="vocab-list-tbody">
+              <!-- Populated dynamically by javascript -->
+            </tbody>
+          </table>
+          <div id="no-vocab-state" class="empty-state">
+            <svg viewBox="0 0 24 24" class="empty-icon"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            <h3>Your Word Book is empty</h3>
+            <p>Highlight any English text on a webpage, click the floating translation button, and save it to fill this table.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 2: Settings (Notion Sync) -->
+      <section id="section-settings" class="content-section">
+        <div class="section-header">
+          <div>
+            <h1>Notion Integration</h1>
+            <p class="subtitle">Automatically sync your saved vocabulary words directly to your Notion workspace database.</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="settings-left-col">
+            <div class="settings-card">
+              <h2>Translation Settings</h2>
+              <form id="translation-config-form">
+                <div class="form-group">
+                  <label for="translation-provider">Translation Provider</label>
+                  <select id="translation-provider" class="form-select" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-card); font-family: inherit; font-size: 14px; margin-top: 4px; box-sizing: border-box;">
+                    <option value="google">Google Translate (Free, Default)</option>
+                    <option value="deepl">DeepL API (Free/Pro Auth Key required)</option>
+                  </select>
+                </div>
+
+                <div id="deepl-fields" class="notion-fields-transition">
+                  <div class="form-group">
+                    <label for="deepl-token">DeepL API Auth Key</label>
+                    <input type="password" id="deepl-token" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx:fx" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 4px; box-sizing: border-box;">
+                    <p class="input-hint">Create a free key at <a href="https://www.deepl.com/pro-api" target="_blank">deepl.com/pro-api</a> (usually ends with <code>:fx</code>).</p>
+                  </div>
+                </div>
+
+                <div class="form-actions" style="margin-top: 16px;">
+                  <button type="button" class="btn btn-secondary" id="btn-test-deepl">Test Translation</button>
+                  <button type="submit" class="btn btn-primary" id="btn-save-translation">Save Translation Settings</button>
+                </div>
+                <div id="translation-status-msg" class="status-msg"></div>
+              </form>
+            </div>
+
+            <div class="settings-card">
+              <h2>Integration Config</h2>
+              <form id="notion-config-form">
+                <div class="form-group toggle-group">
+                  <div class="toggle-text">
+                    <label for="notion-enabled" class="toggle-label">Enable Notion Sync</label>
+                    <p class="input-hint">Toggle this on to start saving vocabulary to Notion database.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="notion-enabled">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div id="notion-fields" class="notion-fields-transition">
+                  <div class="form-group">
+                    <label for="notion-token">Notion Connection Secret Token</label>
+                    <input type="password" id="notion-token" placeholder="secret_xxxxxxxxxxxxxxxxxxxxxxxxxx" required>
+                    <p class="input-hint">The API Secret token you generated in your Notion Connections panel.</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="notion-db-id">Notion Database ID</label>
+                    <input type="text" id="notion-db-id" placeholder="32-character database string" required>
+                    <p class="input-hint">Copy the string after the slash in your full-page Notion database URL.</p>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="button" class="btn btn-secondary" id="btn-test-connection">Test Connection</button>
+                  <button type="submit" class="btn btn-primary" id="btn-save-settings">Save Settings</button>
+                </div>
+                <div id="connection-status-msg" class="status-msg"></div>
+              </form>
+            </div>
+
+            <div class="settings-card" style="margin-top: 24px;">
+              <h2>AI Assistant (OpenRouter / Custom LLM)</h2>
+              <form id="gemini-config-form">
+                <div class="form-group toggle-group">
+                  <div class="toggle-text">
+                    <label for="gemini-enabled" class="toggle-label">Enable AI Word Analysis</label>
+                    <p class="input-hint">Automatically analyze words and generate variations, synonyms, and idioms inside Notion pages.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="gemini-enabled">
+                    <span class="slider round"></span>
+                  </label>
+                </div>
+
+                <div id="gemini-fields" class="notion-fields-transition">
+                  <div class="form-group">
+                    <label for="ai-endpoint">API Base URL</label>
+                    <input type="text" id="ai-endpoint" placeholder="https://openrouter.ai/api/v1" required>
+                    <p class="input-hint">Use <code>https://openrouter.ai/api/v1</code> for OpenRouter, or your custom provider endpoint.</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="gemini-token">API Key</label>
+                    <input type="password" id="gemini-token" placeholder="sk-..." required>
+                    <p class="input-hint">Enter your OpenRouter API Key or provider API Secret.</p>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="ai-model">Model Name</label>
+                    <input type="text" id="ai-model" placeholder="nvidia/llama-3.1-nemotron-70b-instruct:free" required>
+                    <p class="input-hint">Example: <code>nvidia/llama-3.1-nemotron-70b-instruct:free</code> or any model you prefer.</p>
+                  </div>
+                </div>
+
+                <div class="form-actions">
+                  <button type="button" class="btn btn-secondary" id="btn-test-gemini">Test AI Connection</button>
+                  <button type="submit" class="btn btn-primary" id="btn-save-gemini">Save AI Settings</button>
+                </div>
+                <div id="gemini-status-msg" class="status-msg"></div>
+              </form>
+            </div>
+
+            <div class="settings-card" style="margin-top: 24px;">
+              <h2>Debug Logs</h2>
+              <div id="debug-logs-container" style="background: #1e293b; color: #cbd5e1; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 11px; max-height: 150px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4; border: 1px solid #334155; margin-bottom: 12px;">No logs recorded yet. Try saving a word first.</div>
+              <button type="button" class="btn btn-secondary" id="btn-refresh-logs" style="width: auto;">Refresh Logs</button>
+            </div>
+          </div>
+
+          <div class="instructions-card">
+            <h2>Quick Notion Guide (3 Steps)</h2>
+            <div class="steps-list">
+              <div class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                  <strong>Create Connection:</strong>
+                  <p>Access your Notion Settings -> Connections, or visit <a href="https://www.notion.so/my-integrations" target="_blank">notion.so/my-integrations</a>. Create a new connection of type <strong>Access token</strong> named <code>Meow-morize</code> and copy its token secret.</p>
+                </div>
+              </div>
+              
+              <div class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                  <strong>Setup Database Columns:</strong>
+                  <p>Create a Database in your Notion workspace with these exact column names and formats:</p>
+                  <ul>
+                    <li>Column <code>Từ vựng</code> - Type: <strong>Title</strong> (The default first column)</li>
+                    <li>Column <code>Dịch nghĩa</code> - Type: <strong>Rich text</strong></li>
+                    <li>Column <code>Ngữ cảnh</code> - Type: <strong>Rich text</strong></li>
+                    <li>Column <code>Nguồn</code> - Type: <strong>URL</strong></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                  <strong>Grant Access & Copy ID:</strong>
+                  <p>Open the database page in Notion -> Click the <strong>...</strong> menu on the top-right -> <strong>Connect to</strong> -> Search and add `Meow-morize` connection.</p>
+                  <p>Copy the 32-character Database ID from the URL: <code>notion.so/<strong>[DATABASE_ID]</strong>?v=...</code> and paste it on the left.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
