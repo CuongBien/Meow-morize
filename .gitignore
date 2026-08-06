@@ -22,3 +22,12 @@ package-lock.json
 # Local config or temp files
 .env
 *.log
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# Desktop App local database files
+desktop-app/config.json
+desktop-app/srs_data.json
+
