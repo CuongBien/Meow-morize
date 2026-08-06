@@ -6,7 +6,7 @@ from ui.theme import *
 from srs import update_srs_item
 from config import save_synonyms_cache
 from notion_api import fetch_synonyms_antonyms, fetch_notion_page_blocks_text
-from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz
+from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz
 
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn, synonyms_cache, notion_token):
@@ -51,15 +51,19 @@ class ReviewTab(ft.Column):
         # 4. Match Quiz Component (Cho chế độ Đánh dấu Đồng/Trái nghĩa Dạng 2)
         self.match_quiz = MatchQuiz(on_verify=self.handle_match_verified)
 
-        # 5. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
+        # 5. Spelling Quiz Component (Dạng tự viết từ vựng)
+        self.spelling_quiz = SpellingQuiz(on_correct=self.handle_spelling_verified)
+
+        # 6. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
         
-        # 6. Khung tương tác bên tay phải (Interaction Panel)
+        # 7. Khung tương tác bên tay phải (Interaction Panel)
         self.interaction_panel = ft.Column(
             controls=[
                 self.lbl_flashcard_instruction,
                 self.choice_buttons,
                 self.match_quiz,
+                self.spelling_quiz,
                 ft.Container(height=10),
                 self.srs_buttons
             ],
@@ -69,7 +73,7 @@ class ReviewTab(ft.Column):
             spacing=10
         )
         
-        # 7. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
+        # 8. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
         self.main_split_layout = ft.Row(
             controls=[
                 self.word_card,
@@ -81,7 +85,7 @@ class ReviewTab(ft.Column):
             spacing=20
         )
         
-        # 8. Progress UI Components
+        # 9. Progress UI Components
         self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Vui lòng vào tab Settings và bấm Sync with Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
         
@@ -96,12 +100,15 @@ class ReviewTab(ft.Column):
         ]
 
     def on_card_click(self, e):
-        # Chỉ xử lý sự kiện click lật thẻ khi đang ở chế độ Flashcard và nghĩa chưa được hiển thị
-        if self.review_mode == "flashcard" and not self.word_card.lbl_translation.visible:
+        # Cho phép click lật thẻ để xem nghĩa câu trong chế độ Flashcard hoặc Spelling
+        if self.review_mode in ["flashcard", "spelling"] and not self.word_card.lbl_translation.visible:
             if not self.review_queue or self.current_index >= len(self.review_queue):
                 return
             
+            current_item = self.review_queue[self.current_index]
+            
             # Lật thẻ hiển thị nghĩa
+            self.word_card.lbl_word.value = current_item["word"] # Hiện từ gốc
             self.word_card.reveal_translation(True)
             self.lbl_flashcard_instruction.visible = False
             self.page_ref.update()
@@ -134,17 +141,17 @@ class ReviewTab(ft.Column):
             syns = cached_data.get("synonyms", [])
             ants = cached_data.get("antonyms", [])
             
-            # Nếu từ này đã được xác thực có từ đồng nghĩa hoặc trái nghĩa trong cache, cho phép 4 loại quiz
-            # (Hoặc nếu chưa được cache, cứ gán ngẫu nhiên, show_current_card sẽ xử lý lazy loading và fallback)
-            if word not in self.synonyms_cache or syns or ants:
+            # Gán ngẫu nhiên giữa 5 chế độ: flashcard, multiple_choice, spelling, synonym_antonym_choice, synonym_antonym_match
+            if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
                 item["quiz_type"] = random.choice([
                     "flashcard", 
                     "multiple_choice", 
+                    "spelling",
                     "synonym_antonym_choice", 
                     "synonym_antonym_match"
                 ])
             else:
-                item["quiz_type"] = random.choice(["flashcard", "multiple_choice"])
+                item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling"])
                 
         self.update_progress_ui()
         self.show_current_card()
@@ -164,6 +171,7 @@ class ReviewTab(ft.Column):
         self.lbl_flashcard_instruction.visible = False
         self.choice_buttons.show_choices(False)
         self.match_quiz.show_quiz(False)
+        self.spelling_quiz.show_quiz(False)
         
         if not self.review_queue or self.current_index >= len(self.review_queue):
             self.word_card.reset_card(
@@ -184,9 +192,10 @@ class ReviewTab(ft.Column):
         # Đọc chế độ câu hỏi được gán ngẫu nhiên cho từ này
         self.review_mode = item.get("quiz_type", "flashcard")
         
-        # Kiểm tra nếu ở chế độ Đồng/Trái nghĩa, tiến hành lazy loading nếu chưa có trong cache
+        # Kiểm tra nếu ở chế độ Đồng/Trái nghĩa, tiến hành lazy loading nếu chưa có hoặc có dữ liệu cũ trong cache
         if self.review_mode in ["synonym_antonym_choice", "synonym_antonym_match"]:
-            if word not in self.synonyms_cache:
+            cached_data = self.synonyms_cache.get(word, {})
+            if word not in self.synonyms_cache or "source" not in cached_data:
                 self.lbl_progress.value = f"⌛ Loading synonyms for '{word}' from Notion..."
                 self.page_ref.update()
                 
@@ -196,11 +205,11 @@ class ReviewTab(ft.Column):
                 if self.notion_token and item.get("id"):
                     page_text = fetch_notion_page_blocks_text(item["id"], self.notion_token)
                     if page_text:
-                        syn_match = re.search(r"đồng\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE)
+                        syn_match = re.search(r"^\s*đồng\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
                         if syn_match:
                             syns = [s.strip() for s in syn_match.group(1).split(",") if s.strip()]
                         
-                        ant_match = re.search(r"trái\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE)
+                        ant_match = re.search(r"^\s*trái\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
                         if ant_match:
                             ants = [a.strip() for a in ant_match.group(1).split(",") if a.strip()]
                 
@@ -210,15 +219,15 @@ class ReviewTab(ft.Column):
                     self.page_ref.update()
                     syns, ants = fetch_synonyms_antonyms(word)
                 
-                # Lưu vào cache
-                self.synonyms_cache[word] = {"synonyms": syns, "antonyms": ants}
+                # Lưu vào cache kèm đánh dấu source=notion để tự động phục hồi các bản cache cũ
+                self.synonyms_cache[word] = {"synonyms": syns, "antonyms": ants, "source": "notion"}
                 save_synonyms_cache(self.synonyms_cache)
                 
             # Đọc lại từ cache
             cached_data = self.synonyms_cache.get(word, {})
             if not cached_data.get("synonyms") and not cached_data.get("antonyms"):
                 # Nếu cả hai đều không tìm thấy gì, tự động chuyển về Flashcard hoặc Trắc nghiệm dịch
-                self.review_mode = random.choice(["flashcard", "multiple_choice"])
+                self.review_mode = random.choice(["flashcard", "multiple_choice", "spelling"])
         
         # Tiến hành kết xuất giao diện dựa trên chế độ thực tế
         if self.review_mode == "flashcard":
@@ -262,6 +271,26 @@ class ReviewTab(ft.Column):
             self.choice_buttons.show_choices(False)
             self.match_quiz.show_quiz(True)
             self.setup_synonym_antonym_match()
+
+        elif self.review_mode == "spelling":
+            # Ẩn từ gốc trên thẻ để bắt người dùng tự gõ
+            self.word_card.lbl_word.value = "Spell this word 🔠"
+            
+            # Che từ trong ngữ cảnh
+            hidden_context = item["context"]
+            if item["word"].lower() in hidden_context.lower():
+                insensitive_word = re.compile(re.escape(item["word"]), re.IGNORECASE)
+                hidden_context = insensitive_word.sub("_______", hidden_context)
+            self.word_card.set_context(hidden_context)
+            self.word_card.set_translation(item["translation"])
+            self.word_card.lbl_hint.visible = True
+            
+            self.lbl_flashcard_instruction.visible = False
+            self.choice_buttons.show_choices(False)
+            self.match_quiz.show_quiz(False)
+            
+            self.spelling_quiz.show_quiz(True)
+            self.spelling_quiz.set_quiz(item["word"])
         
         self.update_progress_ui()
         self.page_ref.update()
@@ -382,6 +411,14 @@ class ReviewTab(ft.Column):
 
     def handle_match_verified(self):
         # Reveal card answer
+        self.word_card.reveal_translation(True)
+        # Display SRS rating options
+        self.setup_srs_ratings()
+
+    def handle_spelling_verified(self):
+        # Reveal target word and translation on card
+        current_item = self.review_queue[self.current_index]
+        self.word_card.lbl_word.value = current_item["word"]
         self.word_card.reveal_translation(True)
         # Display SRS rating options
         self.setup_srs_ratings()
