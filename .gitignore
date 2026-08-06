@@ -30,4 +30,6 @@ package-lock.json
 # Desktop App local database files
 desktop-app/config.json
 desktop-app/srs_data.json
+desktop-app/synonyms_cache.json
+
 

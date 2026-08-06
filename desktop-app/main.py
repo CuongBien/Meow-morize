@@ -1,20 +1,21 @@
 import flet as ft
-from config import load_config, save_config, load_srs_data, save_srs_data
-from notion_api import fetch_notion_vocab
+from config import load_config, save_config, load_srs_data, save_srs_data, load_synonyms_cache, save_synonyms_cache
+from notion_api import fetch_notion_vocab, fetch_synonyms_antonyms
 from ui.theme import *
 from ui.review_tab import ReviewTab
 from ui.settings_tab import SettingsTab
 
 def main(page: ft.Page):
     page.title = "Meow-morize Desktop Review App 🐾"
-    page.window_width = 800
-    page.window_height = 650
+    page.window_width = 950
+    page.window_height = 680
     page.theme_mode = ft.ThemeMode.DARK
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
 
     # Tải cấu hình và dữ liệu ôn tập cục bộ
     config = load_config()
     srs_data = load_srs_data()
+    synonyms_cache = load_synonyms_cache()
     vocab_list = []
 
     # Định nghĩa hàm callback lưu dữ liệu SRS
@@ -23,9 +24,12 @@ def main(page: ft.Page):
 
     # Hàm đồng bộ dữ liệu với Notion
     def sync_from_notion(token, db_id, status_label=None):
-        nonlocal vocab_list
+        nonlocal vocab_list, synonyms_cache
         try:
             vocab_list = fetch_notion_vocab(token, db_id)
+            
+            review_tab.synonyms_cache = synonyms_cache
+            review_tab.notion_token = token
             review_tab.build_review_queue(vocab_list)
             
             if status_label:
@@ -39,8 +43,8 @@ def main(page: ft.Page):
                 page.update()
             raise ex
 
-    # Khởi dựng các Tab UI
-    review_tab = ReviewTab(page, srs_data, save_srs_data_fn)
+    # Khởi dựng các Tab UI (Truyền cache từ đồng nghĩa và notion_token vào)
+    review_tab = ReviewTab(page, srs_data, save_srs_data_fn, synonyms_cache, config["notion_token"])
     settings_tab = SettingsTab(page, config, save_config, sync_from_notion)
 
     # Tự động tải từ Notion khi mở app nếu đã có sẵn Token & Database ID

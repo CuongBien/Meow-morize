@@ -16,8 +16,8 @@ class ChoiceButtons(ft.Column):
         self.btns = []
         for i in range(4):
             btn = ft.Button(
-                content=f"Choice {i+1}",
-                width=450,
+                content=ft.Text(f"Choice {i+1}"),
+                width=380,
                 height=45,
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_PRIMARY,
@@ -45,7 +45,7 @@ class ChoiceButtons(ft.Column):
                 
                 # Show the correct answer in green
                 for btn in self.btns:
-                    if btn.content == self.correct_answer:
+                    if btn.content.value == self.correct_answer:
                         btn.bgcolor = COLOR_SUCCESS_DARK
                         btn.color = COLOR_TEXT_PRIMARY
             
@@ -60,7 +60,7 @@ class ChoiceButtons(ft.Column):
         self.correct_answer = correct_answer
         
         for i in range(4):
-            self.btns[i].content = choices[i]
+            self.btns[i].content.value = choices[i]
             self.btns[i].bgcolor = COLOR_BG_CARD
             self.btns[i].color = COLOR_TEXT_PRIMARY
             self.btns[i].disabled = False

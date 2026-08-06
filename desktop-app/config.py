@@ -29,3 +29,19 @@ def load_srs_data():
 def save_srs_data(srs_data):
     with open(SRS_FILE, "w", encoding="utf-8") as f:
         json.dump(srs_data, f, ensure_ascii=False, indent=2)
+
+SYNONYMS_FILE = os.path.join(os.path.dirname(__file__), "synonyms_cache.json")
+
+def load_synonyms_cache():
+    if os.path.exists(SYNONYMS_FILE):
+        try:
+            with open(SYNONYMS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_synonyms_cache(cache):
+    with open(SYNONYMS_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+

@@ -29,10 +29,10 @@ class WordCard(ft.Container):
         self.init_ui()
 
     def init_ui(self):
-        self.lbl_word = ft.Text(value="Ready", size=36, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-        self.lbl_context = ft.Text(value="Context", italic=True, size=15, color=COLOR_TEXT_MUTED, text_align=ft.TextAlign.CENTER)
-        self.lbl_translation = ft.Text(value="Translation", size=20, weight=ft.FontWeight.W_500, color=COLOR_INFO, text_align=ft.TextAlign.CENTER, visible=False)
-        self.lbl_hint = ft.Text(value="(Nhấp vào thẻ để xem nghĩa 💡)", size=12, color=COLOR_TEXT_SUBTITLE, text_align=ft.TextAlign.CENTER)
+        self.lbl_word = ft.Text(value="Welcome! 🐾", size=36, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+        self.lbl_context = ft.Text(value="Hãy chọn tab Settings ⚙️ ở góc trên\nđể kết nối Notion và đồng bộ từ vựng nhé!", italic=True, size=15, color=COLOR_TEXT_MUTED, text_align=ft.TextAlign.CENTER)
+        self.lbl_translation = ft.Text(value="", size=20, weight=ft.FontWeight.W_500, color=COLOR_INFO, text_align=ft.TextAlign.CENTER, visible=False)
+        self.lbl_hint = ft.Text(value="", size=12, color=COLOR_TEXT_SUBTITLE, text_align=ft.TextAlign.CENTER)
         
         self.content = ft.Column(
             controls=[
