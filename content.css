@@ -1,0 +1,5 @@
+/* VocabSaver content script styling */
+/* Hầu hết giao diện đã được cô lập trong Shadow DOM của content.js */
+#vocabsaver-root {
+  all: initial;
+}
