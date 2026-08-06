@@ -45,7 +45,7 @@ def main(page: ft.Page):
 
     # Tự động tải từ Notion khi mở app nếu đã có sẵn Token & Database ID
     if config["notion_token"] and config["database_id"]:
-        def initial_load():
+        async def initial_load():
             try:
                 sync_from_notion(config["notion_token"], config["database_id"])
             except Exception:

@@ -4,7 +4,7 @@ from ui.theme import *
 class SettingsTab(ft.Column):
     def __init__(self, page: ft.Page, config, save_config_fn, sync_fn):
         super().__init__()
-        self.page = page
+        self.page_ref = page
         self.config = config
         self.save_config_fn = save_config_fn
         self.sync_fn = sync_fn
@@ -36,7 +36,7 @@ class SettingsTab(ft.Column):
     def on_sync_click(self, e):
         self.lbl_status.value = "Fetching from Notion, please wait..."
         self.lbl_status.color = COLOR_WARNING
-        self.page.update()
+        self.page_ref.update()
         
         token = self.txt_token.value.strip()
         db_id = self.txt_db_id.value.strip()
@@ -44,7 +44,7 @@ class SettingsTab(ft.Column):
         if not token or not db_id:
             self.lbl_status.value = "Please fill in both Token and Database ID!"
             self.lbl_status.color = COLOR_ERROR
-            self.page.update()
+            self.page_ref.update()
             return
             
         try:
@@ -58,4 +58,4 @@ class SettingsTab(ft.Column):
         except Exception as ex:
             self.lbl_status.value = f"Error: {str(ex)}"
             self.lbl_status.color = COLOR_ERROR
-            self.page.update()
+            self.page_ref.update()

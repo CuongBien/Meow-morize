@@ -7,7 +7,7 @@ from srs import update_srs_item
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn):
         super().__init__()
-        self.page = page
+        self.page_ref = page
         self.srs_data = srs_data
         self.save_srs_data_fn = save_srs_data_fn
         self.vocab_list = []
@@ -139,7 +139,7 @@ class ReviewTab(ft.Column):
             self.card_context.value = hidden_context
             self.card_translation.value = item["translation"]
             
-        self.page.update()
+        self.page_ref.update()
 
     # Event click lật thẻ
     def on_reveal_click(self, e):
@@ -173,7 +173,7 @@ class ReviewTab(ft.Column):
         self.btn_hard.visible = True
         self.btn_good.visible = True
         self.btn_easy.visible = True
-        self.page.update()
+        self.page_ref.update()
 
     # Event click đánh giá chất lượng ghi nhớ (SRS)
     def make_rate_handler(self, quality):
