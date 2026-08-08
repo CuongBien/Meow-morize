@@ -9,7 +9,8 @@ def main(page: ft.Page):
     page.title = "Meow-morize Desktop Review App 🐾"
     page.window_width = 950
     page.window_height = 680
-    page.theme_mode = ft.ThemeMode.DARK
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.theme = ft.Theme(color_scheme_seed=COLOR_PRIMARY)
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
 
     # Tải cấu hình và dữ liệu ôn tập cục bộ

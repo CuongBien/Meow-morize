@@ -44,7 +44,7 @@ class SpellingQuiz(ft.Column):
         self.btn_submit = ft.Button(
             content=ft.Text("Kiểm tra 📝"),
             bgcolor=COLOR_PRIMARY,
-            color=COLOR_TEXT_PRIMARY,
+            color="#ffffff",
             width=180,
             height=40,
             on_click=self.on_submit_click

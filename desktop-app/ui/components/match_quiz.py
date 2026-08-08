@@ -56,7 +56,7 @@ class MatchQuiz(ft.Column):
         self.btn_verify = ft.Button(
             content=ft.Text("Verify 🔍"),
             bgcolor=COLOR_PRIMARY,
-            color=COLOR_TEXT_PRIMARY,
+            color="#ffffff",
             width=180,
             height=40,
             on_click=self.on_verify_click
@@ -78,12 +78,12 @@ class MatchQuiz(ft.Column):
                 view["selection"] = choice_type
                 if choice_type == "synonym":
                     view["btn_syn"].bgcolor = COLOR_PRIMARY
-                    view["btn_syn"].color = COLOR_TEXT_PRIMARY
+                    view["btn_syn"].color = "#ffffff"
                     view["btn_ant"].bgcolor = COLOR_BG_CARD
                     view["btn_ant"].color = COLOR_TEXT_MUTED
                 else:
                     view["btn_ant"].bgcolor = COLOR_PRIMARY
-                    view["btn_ant"].color = COLOR_TEXT_PRIMARY
+                    view["btn_ant"].color = "#ffffff"
                     view["btn_syn"].bgcolor = COLOR_BG_CARD
                     view["btn_syn"].color = COLOR_TEXT_MUTED
             self.update()

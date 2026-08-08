@@ -19,7 +19,7 @@ class SettingsTab(ft.Column):
         self.txt_db_id = ft.TextField(label="Database ID", value=self.config["database_id"], width=500)
         self.lbl_status = ft.Text(value="", color=COLOR_SUCCESS)
         
-        self.btn_sync = ft.Button(content=ft.Text("Sync with Notion 🔄"), on_click=self.on_sync_click, bgcolor=COLOR_PRIMARY, color=COLOR_TEXT_PRIMARY)
+        self.btn_sync = ft.Button(content=ft.Text("Sync with Notion 🔄"), on_click=self.on_sync_click, bgcolor=COLOR_PRIMARY, color="#ffffff")
         
         self.controls = [
             ft.Text("Notion Connection Settings ⚙️", size=22, weight=ft.FontWeight.BOLD),
