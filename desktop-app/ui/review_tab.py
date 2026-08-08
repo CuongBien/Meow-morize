@@ -6,7 +6,7 @@ from ui.theme import *
 from srs import update_srs_item
 from config import save_synonyms_cache
 from notion_api import fetch_synonyms_antonyms, fetch_notion_page_blocks_text
-from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz
+from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz, ScrambleQuiz
 
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn, synonyms_cache, notion_token):
@@ -36,7 +36,7 @@ class ReviewTab(ft.Column):
             content=ft.Column(
                 controls=[
                     ft.Icon(icon=ft.Icons.LIGHTBULB_OUTLINED, color=COLOR_WARNING, size=40),
-                    ft.Text("Nhấn vào thẻ bên trái\nđể xem nghĩa câu 💡", size=16, weight=ft.FontWeight.W_500, text_align=ft.TextAlign.CENTER),
+                    ft.Text("Nhấn vào thẻ bên trái\nde xem nghĩa câu 💡", size=16, weight=ft.FontWeight.W_500, text_align=ft.TextAlign.CENTER),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER
             ),
@@ -54,16 +54,20 @@ class ReviewTab(ft.Column):
         # 5. Spelling Quiz Component (Dạng tự viết từ vựng)
         self.spelling_quiz = SpellingQuiz(on_correct=self.handle_spelling_verified)
 
-        # 6. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
+        # 6. Scramble Quiz Component (Dạng sắp xếp chữ cái)
+        self.scramble_quiz = ScrambleQuiz(on_correct=self.handle_scramble_verified)
+
+        # 7. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
         
-        # 7. Khung tương tác bên tay phải (Interaction Panel)
+        # 8. Khung tương tác bên tay phải (Interaction Panel)
         self.interaction_panel = ft.Column(
             controls=[
                 self.lbl_flashcard_instruction,
                 self.choice_buttons,
                 self.match_quiz,
                 self.spelling_quiz,
+                self.scramble_quiz,
                 ft.Container(height=10),
                 self.srs_buttons
             ],
@@ -73,7 +77,7 @@ class ReviewTab(ft.Column):
             spacing=10
         )
         
-        # 8. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
+        # 9. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
         self.main_split_layout = ft.Row(
             controls=[
                 self.word_card,
@@ -85,7 +89,7 @@ class ReviewTab(ft.Column):
             spacing=20
         )
         
-        # 9. Progress UI Components
+        # 10. Progress UI Components
         self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Vui lòng vào tab Settings và bấm Sync with Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
         
@@ -100,14 +104,22 @@ class ReviewTab(ft.Column):
         ]
 
     def on_card_click(self, e):
-        # Cho phép click lật thẻ để xem nghĩa câu trong chế độ Flashcard hoặc Spelling
-        if self.review_mode in ["flashcard", "spelling"] and not self.word_card.lbl_translation.visible:
+        # Cho phép click lật thẻ để xem nghĩa/từ gốc trong các chế độ ôn tập
+        is_hidden = False
+        if self.review_mode in ["flashcard"] and not self.word_card.lbl_translation.visible:
+            is_hidden = True
+        elif self.review_mode in ["spelling"] and self.word_card.lbl_word.value == "Spell this word 🔠":
+            is_hidden = True
+        elif self.review_mode in ["scramble"] and self.word_card.lbl_word.value == "Unscramble the letters! 🔄":
+            is_hidden = True
+            
+        if is_hidden:
             if not self.review_queue or self.current_index >= len(self.review_queue):
                 return
             
             current_item = self.review_queue[self.current_index]
             
-            # Lật thẻ hiển thị nghĩa
+            # Lật thẻ hiển thị nghĩa và từ gốc tiếng Anh
             self.word_card.lbl_word.value = current_item["word"] # Hiện từ gốc
             self.word_card.reveal_translation(True)
             self.lbl_flashcard_instruction.visible = False
@@ -141,17 +153,18 @@ class ReviewTab(ft.Column):
             syns = cached_data.get("synonyms", [])
             ants = cached_data.get("antonyms", [])
             
-            # Gán ngẫu nhiên giữa 5 chế độ: flashcard, multiple_choice, spelling, synonym_antonym_choice, synonym_antonym_match
+            # Gán ngẫu nhiên giữa 6 chế độ: flashcard, multiple_choice, spelling, scramble, synonym_antonym_choice, synonym_antonym_match
             if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
                 item["quiz_type"] = random.choice([
                     "flashcard", 
                     "multiple_choice", 
                     "spelling",
+                    "scramble",
                     "synonym_antonym_choice", 
                     "synonym_antonym_match"
                 ])
             else:
-                item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling"])
+                item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling", "scramble"])
                 
         self.update_progress_ui()
         self.show_current_card()
@@ -172,6 +185,7 @@ class ReviewTab(ft.Column):
         self.choice_buttons.show_choices(False)
         self.match_quiz.show_quiz(False)
         self.spelling_quiz.show_quiz(False)
+        self.scramble_quiz.show_quiz(False)
         
         if not self.review_queue or self.current_index >= len(self.review_queue):
             self.word_card.reset_card(
@@ -227,7 +241,7 @@ class ReviewTab(ft.Column):
             cached_data = self.synonyms_cache.get(word, {})
             if not cached_data.get("synonyms") and not cached_data.get("antonyms"):
                 # Nếu cả hai đều không tìm thấy gì, tự động chuyển về Flashcard hoặc Trắc nghiệm dịch
-                self.review_mode = random.choice(["flashcard", "multiple_choice", "spelling"])
+                self.review_mode = random.choice(["flashcard", "multiple_choice", "spelling", "scramble"])
         
         # Tiến hành kết xuất giao diện dựa trên chế độ thực tế
         if self.review_mode == "flashcard":
@@ -283,6 +297,7 @@ class ReviewTab(ft.Column):
                 hidden_context = insensitive_word.sub("_______", hidden_context)
             self.word_card.set_context(hidden_context)
             self.word_card.set_translation(item["translation"])
+            self.word_card.lbl_translation.visible = True
             self.word_card.lbl_hint.visible = True
             
             self.lbl_flashcard_instruction.visible = False
@@ -291,6 +306,28 @@ class ReviewTab(ft.Column):
             
             self.spelling_quiz.show_quiz(True)
             self.spelling_quiz.set_quiz(item["word"])
+
+        elif self.review_mode == "scramble":
+            # Ẩn từ gốc trên thẻ để bắt người dùng tự ghép chữ cái
+            self.word_card.lbl_word.value = "Unscramble the letters! 🔄"
+            
+            # Che từ trong ngữ cảnh
+            hidden_context = item["context"]
+            if item["word"].lower() in hidden_context.lower():
+                insensitive_word = re.compile(re.escape(item["word"]), re.IGNORECASE)
+                hidden_context = insensitive_word.sub("_______", hidden_context)
+            self.word_card.set_context(hidden_context)
+            self.word_card.set_translation(item["translation"])
+            self.word_card.lbl_translation.visible = True
+            self.word_card.lbl_hint.visible = True
+            
+            self.lbl_flashcard_instruction.visible = False
+            self.choice_buttons.show_choices(False)
+            self.match_quiz.show_quiz(False)
+            self.spelling_quiz.show_quiz(False)
+            
+            self.scramble_quiz.show_quiz(True)
+            self.scramble_quiz.set_quiz(item["word"])
         
         self.update_progress_ui()
         self.page_ref.update()
@@ -416,6 +453,14 @@ class ReviewTab(ft.Column):
         self.setup_srs_ratings()
 
     def handle_spelling_verified(self):
+        # Reveal target word and translation on card
+        current_item = self.review_queue[self.current_index]
+        self.word_card.lbl_word.value = current_item["word"]
+        self.word_card.reveal_translation(True)
+        # Display SRS rating options
+        self.setup_srs_ratings()
+
+    def handle_scramble_verified(self):
         # Reveal target word and translation on card
         current_item = self.review_queue[self.current_index]
         self.word_card.lbl_word.value = current_item["word"]
