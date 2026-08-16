@@ -16,7 +16,10 @@ def play_tts(word):
         # Làm sạch chuỗi từ tránh lỗi lệnh PowerShell
         clean_word = "".join([c for c in word if c.isalnum() or c.isspace() or c in ["-", "_", "'"]])
         ps_cmd = f"Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{clean_word}')"
-        subprocess.run(["powershell", "-Command", ps_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0  # SW_HIDE
+        subprocess.run(["powershell", "-Command", ps_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=si)
     threading.Thread(target=run, daemon=True).start()
 
 class ReviewTab(ft.Column):
