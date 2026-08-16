@@ -119,13 +119,14 @@ class MatchQuiz(ft.Column):
             word = view["lbl_word"].value
             correct_rel = self.correct_answers.get(word, "unrelated")
             user_sel = view["selection"]
+            normalized_user_sel = user_sel if user_sel is not None else "unrelated"
             
             # Khóa nút
             view["btn_syn"].disabled = True
             view["btn_ant"].disabled = True
             
             # Nếu người dùng chọn đúng
-            if user_sel == correct_rel:
+            if normalized_user_sel == correct_rel:
                 if correct_rel == "synonym":
                     view["btn_syn"].bgcolor = COLOR_SUCCESS_DARK
                     view["btn_syn"].color = COLOR_TEXT_PRIMARY
