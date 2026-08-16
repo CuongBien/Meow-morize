@@ -39,7 +39,8 @@ def fetch_notion_vocab(token, db_id):
                 "word": word,
                 "translation": translation,
                 "context": context,
-                "source": source
+                "source": source,
+                "url": page.get("url")
             })
             
     return vocab_list
@@ -86,9 +87,25 @@ def fetch_notion_page_blocks_text(page_id, token):
                 block_content = block.get(block_type, {})
                 rich_text = block_content.get("rich_text", [])
                 if rich_text:
-                    line = "".join([t.get("plain_text", "") for t in rich_text])
-                    text_lines.append(line)
-            return "\n".join(text_lines)
+                    line = "".join([t.get("plain_text", "") for t in rich_text]).strip()
+                    if line:
+                        # Định dạng tương ứng với từng loại block trong Notion
+                        if block_type == "bulleted_list_item":
+                            line = f"- {line}"
+                        elif block_type == "numbered_list_item":
+                            line = f"1. {line}"
+                        elif block_type in ["heading_1", "heading_2", "heading_3"]:
+                            clean_line = line.lstrip("#").strip()
+                            line = f"## {clean_line}"
+                        else:
+                            # Tự động chuyển các tiêu đề bắt đầu bằng Emoji chính thành tiêu đề Markdown H3
+                            for emoji in ["🏷️", "📚", "🔄", "📝", "🔥"]:
+                                if line.startswith(emoji):
+                                    line = f"### {line}"
+                                    break
+                        text_lines.append(line)
+            # Dùng 2 dấu xuống dòng \n\n để Markdown tách biệt các đoạn văn bản (Paragraphs) đẹp đẽ
+            return "\n\n".join(text_lines)
     except Exception:
         pass
     return ""
