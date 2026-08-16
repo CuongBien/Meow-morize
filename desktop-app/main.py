@@ -11,7 +11,8 @@ def main(page: ft.Page):
     page.window_height = 680
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed=COLOR_PRIMARY)
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.vertical_alignment = ft.MainAxisAlignment.START
+    page.padding = ft.Padding(20, 15, 20, 15)
 
     # Tải cấu hình và dữ liệu ôn tập cục bộ
     config = load_config()
@@ -44,9 +45,12 @@ def main(page: ft.Page):
                 page.update()
             raise ex
 
-    # Khởi dựng các Tab UI (Truyền cache từ đồng nghĩa và notion_token vào)
+    # Khởi dựng UI
     review_tab = ReviewTab(page, srs_data, save_srs_data_fn, synonyms_cache, config["notion_token"])
     settings_tab = SettingsTab(page, config, save_config, sync_from_notion)
+
+    # Liên kết tham chiếu Settings vào ReviewTab
+    review_tab.settings_tab_ref = settings_tab
 
     # Tự động tải từ Notion khi mở app nếu đã có sẵn Token & Database ID
     if config["notion_token"] and config["database_id"]:
@@ -54,39 +58,12 @@ def main(page: ft.Page):
             try:
                 sync_from_notion(config["notion_token"], config["database_id"])
             except Exception:
-                settings_tab.lbl_status.value = "Initial auto-sync failed. Check your token/connection."
-                settings_tab.lbl_status.color = COLOR_ERROR
-                page.update()
+                pass
 
         page.run_task(initial_load)
 
-    # Dựng cấu trúc Tab giao diện lồng nhau
-    tabs = ft.Tabs(
-        length=2,
-        selected_index=0,
-        animation_duration=300,
-        content=ft.Column(
-            controls=[
-                ft.TabBar(
-                    tabs=[
-                        ft.Tab(label="Review Panel 🧠"),
-                        ft.Tab(label="Settings ⚙️")
-                    ]
-                ),
-                ft.TabBarView(
-                    controls=[
-                        review_tab,
-                        settings_tab
-                    ],
-                    expand=True
-                )
-            ],
-            expand=True
-        ),
-        expand=True
-    )
-
-    page.add(tabs)
+    # Thêm trực tiếp ReviewTab vào trang (không dùng Tabs)
+    page.add(review_tab)
 
 if __name__ == "__main__":
     ft.run(main)
