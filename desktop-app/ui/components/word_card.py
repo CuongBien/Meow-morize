@@ -2,7 +2,7 @@ import flet as ft
 from ui.theme import *
 
 class WordCard(ft.Container):
-    def __init__(self, on_card_click=None):
+    def __init__(self, on_card_click=None, on_speak_click=None):
         super().__init__()
         self.padding = 30
         self.width = 380
@@ -25,11 +25,22 @@ class WordCard(ft.Container):
         # Bật con trỏ chuột dạng bàn tay và gán sự kiện click để lật thẻ
         self.mouse_cursor = ft.MouseCursor.CLICK
         self.on_click = on_card_click
+        self.on_speak_click = on_speak_click
         
         self.init_ui()
 
     def init_ui(self):
         self.lbl_word = ft.Text(value="Welcome! 🐾", size=36, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
+        
+        # Nút phát âm thanh từ vựng (Listening Mode)
+        self.btn_speak = ft.IconButton(
+            icon=ft.Icons.VOLUME_UP_ROUNDED,
+            icon_size=48,
+            icon_color=COLOR_PRIMARY,
+            visible=False,
+            on_click=self.on_speak_click
+        )
+        
         self.lbl_context = ft.Text(value="Hãy chọn tab Settings ⚙️ ở góc trên\nđể kết nối Notion và đồng bộ từ vựng nhé!", italic=True, size=15, color=COLOR_TEXT_MUTED, text_align=ft.TextAlign.CENTER)
         self.lbl_translation = ft.Text(value="", size=20, weight=ft.FontWeight.W_500, color=COLOR_INFO, text_align=ft.TextAlign.CENTER, visible=False)
         self.lbl_hint = ft.Text(value="", size=12, color=COLOR_TEXT_SUBTITLE, text_align=ft.TextAlign.CENTER)
@@ -38,6 +49,7 @@ class WordCard(ft.Container):
             controls=[
                 self.lbl_word,
                 ft.Divider(color=COLOR_BORDER),
+                self.btn_speak,
                 self.lbl_context,
                 ft.Container(height=10),
                 self.lbl_translation,
@@ -59,7 +71,6 @@ class WordCard(ft.Container):
 
     def reveal_translation(self, visible=True):
         self.lbl_translation.visible = visible
-        # Ẩn dòng chữ gợi ý click khi đã lộ đáp án
         self.lbl_hint.visible = not visible
         self.update()
 
@@ -69,4 +80,5 @@ class WordCard(ft.Container):
         self.lbl_translation.value = translation
         self.lbl_translation.visible = False
         self.lbl_hint.visible = True
+        self.btn_speak.visible = False
         self.update()
