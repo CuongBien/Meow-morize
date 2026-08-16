@@ -1,12 +1,23 @@
 import datetime
 import re
 import random
+import threading
+import subprocess
 import flet as ft
 from ui.theme import *
 from srs import update_srs_item
 from config import save_synonyms_cache
 from notion_api import fetch_synonyms_antonyms, fetch_notion_page_blocks_text
 from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz, ScrambleQuiz
+
+# Bộ phát âm thanh Text-To-Speech ngoại tuyến thông qua Windows Speech API (SAPI)
+def play_tts(word):
+    def run():
+        # Làm sạch chuỗi từ tránh lỗi lệnh PowerShell
+        clean_word = "".join([c for c in word if c.isalnum() or c.isspace() or c in ["-", "_", "'"]])
+        ps_cmd = f"Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{clean_word}')"
+        subprocess.run(["powershell", "-Command", ps_cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    threading.Thread(target=run, daemon=True).start()
 
 class ReviewTab(ft.Column):
     def __init__(self, page: ft.Page, srs_data, save_srs_data_fn, synonyms_cache, notion_token):
@@ -21,6 +32,8 @@ class ReviewTab(ft.Column):
         self.review_queue = []
         self.current_index = 0
         self.review_mode = "flashcard"
+        self.settings_tab_ref = None  # Sẽ được gán từ main.py
+        self.detail_open = False
         
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         self.alignment = ft.MainAxisAlignment.CENTER
@@ -28,8 +41,8 @@ class ReviewTab(ft.Column):
         self.init_ui()
 
     def init_ui(self):
-        # 1. Word Card Component (Truyền callback click lật thẻ)
-        self.word_card = WordCard(on_card_click=self.on_card_click)
+        # 1. Word Card Component (Truyền callback click lật thẻ và click nút phát âm)
+        self.word_card = WordCard(on_card_click=self.on_card_click, on_speak_click=self.handle_speak_word)
         
         # 2. Dòng chữ hướng dẫn lật thẻ (Chỉ hiện trong chế độ Flashcard khi chưa lật)
         self.lbl_flashcard_instruction = ft.Container(
@@ -45,7 +58,7 @@ class ReviewTab(ft.Column):
             visible=False
         )
         
-        # 3. Choice Buttons Component (Cho chế độ Trắc nghiệm dịch nghĩa & Đồng/Trái nghĩa Dạng 1)
+        # 3. Choice Buttons Component (Cho chế độ Trắc nghiệm dịch nghĩa, Đồng/Trái nghĩa & Nghe chọn từ)
         self.choice_buttons = ChoiceButtons(on_choice_click=self.handle_choice_selected)
 
         # 4. Match Quiz Component (Cho chế độ Đánh dấu Đồng/Trái nghĩa Dạng 2)
@@ -59,8 +72,34 @@ class ReviewTab(ft.Column):
 
         # 7. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
+
+        # 7.5. Progress UI Components
+        self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
+        self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Bấm nút ⚙️ để cấu hình Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
         
-        # 8. Khung tương tác bên tay phải (Interaction Panel)
+        # 8. Các nút tiện ích (Xem chi tiết Notion & Mở link Notion)
+        self.btn_open_notion = ft.TextButton(
+            content=ft.Text("Open in Notion 🔗"),
+            on_click=self.handle_open_notion,
+            visible=False
+        )
+        self.btn_view_details = ft.TextButton(
+            content=ft.Text("Xem chi tiết 📄"),
+            on_click=self.handle_view_details,
+            visible=False
+        )
+        self.left_column = ft.Column(
+            controls=[
+                self.word_card,
+                ft.Row(
+                    controls=[self.btn_view_details, self.btn_open_notion],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=15
+                )
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+
         self.interaction_panel = ft.Column(
             controls=[
                 self.lbl_flashcard_instruction,
@@ -76,32 +115,110 @@ class ReviewTab(ft.Column):
             width=380,
             spacing=10
         )
-        
-        # 9. Giao diện Song song (Split Layout: Card bên trái, Tương tác bên phải)
-        self.main_split_layout = ft.Row(
-            controls=[
-                self.word_card,
-                ft.VerticalDivider(color=COLOR_BORDER, width=20),
-                self.interaction_panel
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=20
+
+        # 9. Detail Panel bên phải (đóng/mở được, toàn bộ chiều cao cửa sổ)
+        self.detail_markdown = ft.Markdown("", selectable=True)
+        self.detail_panel = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Text("Chi tiết từ vựng 📄", size=16, weight=ft.FontWeight.BOLD),
+                            ft.IconButton(
+                                icon=ft.Icons.CLOSE,
+                                icon_color=COLOR_TEXT_MUTED,
+                                icon_size=20,
+                                on_click=self.handle_close_detail
+                            )
+                        ],
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                    ),
+                    ft.Divider(color=COLOR_BORDER, height=1),
+                    ft.Column(
+                        controls=[self.detail_markdown],
+                        scroll=ft.ScrollMode.AUTO,
+                        expand=True
+                    )
+                ],
+                spacing=8,
+                expand=True
+            ),
+            width=420,
+            border=ft.Border(
+                left=ft.BorderSide(1, COLOR_BORDER),
+                top=ft.BorderSide(0, "transparent"),
+                right=ft.BorderSide(0, "transparent"),
+                bottom=ft.BorderSide(0, "transparent")
+            ),
+            padding=ft.Padding(25, 20, 20, 20),
+            visible=False
         )
         
-        # 10. Progress UI Components
-        self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
-        self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Vui lòng vào tab Settings và bấm Sync with Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
-        
+        # 10. Khu vực ôn tập chính (Card + Interaction + Progress)
+        self.center_area = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        self.left_column,
+                        ft.VerticalDivider(color=COLOR_BORDER, width=20),
+                        self.interaction_panel
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=20
+                ),
+                ft.Container(height=20),
+                self.progress_bar,
+                self.lbl_progress
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            expand=True
+        )
+
+        # 11. Nút Settings
+        self.btn_settings = ft.IconButton(
+            icon=ft.Icons.SETTINGS,
+            icon_color=COLOR_TEXT_MUTED,
+            icon_size=22,
+            on_click=self.handle_open_settings
+        )
+
+        # 12. Cột chính chứa Header + Content (sẽ bị đẩy sang trái khi mở detail panel)
+        self.main_column = ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Column(
+                            controls=[
+                                ft.Text("Meow-morize Daily Review 🐾", size=24, weight=ft.FontWeight.BOLD),
+                                ft.Text("Master your vocabulary using Spaced Repetition", size=14, color=COLOR_TEXT_SUBTITLE),
+                            ]
+                        ),
+                        self.btn_settings
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                ft.Divider(color=COLOR_BORDER, height=1),
+                self.center_area
+            ],
+            expand=True
+        )
+
+        # 13. Bố cục tổng: [Main Column | Detail Panel] — detail panel đẩy toàn bộ main column
         self.controls = [
-            ft.Text("Meow-morize Daily Review 🐾", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text("Master your vocabulary using Spaced Repetition", size=14, color=COLOR_TEXT_SUBTITLE),
-            ft.Container(height=20),
-            self.main_split_layout,
-            ft.Container(height=20),
-            self.progress_bar,
-            self.lbl_progress
+            ft.Row(
+                controls=[
+                    self.main_column,
+                    self.detail_panel
+                ],
+                expand=True,
+                spacing=0
+            )
         ]
+        self.expand = True
+        self.scroll = None
 
     def on_card_click(self, e):
         # Cho phép click lật thẻ để xem nghĩa/từ gốc trong các chế độ ôn tập
@@ -111,6 +228,8 @@ class ReviewTab(ft.Column):
         elif self.review_mode in ["spelling"] and self.word_card.lbl_word.value == "Spell this word 🔠":
             is_hidden = True
         elif self.review_mode in ["scramble"] and self.word_card.lbl_word.value == "Unscramble the letters! 🔄":
+            is_hidden = True
+        elif self.review_mode in ["listening"] and self.word_card.lbl_word.value == "Listen and choose! 🎧":
             is_hidden = True
             
         if is_hidden:
@@ -153,18 +272,19 @@ class ReviewTab(ft.Column):
             syns = cached_data.get("synonyms", [])
             ants = cached_data.get("antonyms", [])
             
-            # Gán ngẫu nhiên giữa 6 chế độ: flashcard, multiple_choice, spelling, scramble, synonym_antonym_choice, synonym_antonym_match
+            # Gán ngẫu nhiên giữa 7 chế độ: flashcard, multiple_choice, spelling, scramble, listening, synonym_antonym_choice, synonym_antonym_match
             if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
                 item["quiz_type"] = random.choice([
                     "flashcard", 
                     "multiple_choice", 
                     "spelling",
                     "scramble",
+                    "listening",
                     "synonym_antonym_choice", 
                     "synonym_antonym_match"
                 ])
             else:
-                item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling", "scramble"])
+                item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling", "scramble", "listening"])
                 
         self.update_progress_ui()
         self.show_current_card()
@@ -186,6 +306,9 @@ class ReviewTab(ft.Column):
         self.match_quiz.show_quiz(False)
         self.spelling_quiz.show_quiz(False)
         self.scramble_quiz.show_quiz(False)
+        self.word_card.btn_speak.visible = False
+        self.btn_open_notion.visible = False
+        self.btn_view_details.visible = False
         
         if not self.review_queue or self.current_index >= len(self.review_queue):
             self.word_card.reset_card(
@@ -215,6 +338,7 @@ class ReviewTab(ft.Column):
                 
                 syns = []
                 ants = []
+                page_text = ""
                 # 1. Đầu tiên, cố gắng lấy từ trang Notion (do AI viết)
                 if self.notion_token and item.get("id"):
                     page_text = fetch_notion_page_blocks_text(item["id"], self.notion_token)
@@ -234,14 +358,19 @@ class ReviewTab(ft.Column):
                     syns, ants = fetch_synonyms_antonyms(word)
                 
                 # Lưu vào cache kèm đánh dấu source=notion để tự động phục hồi các bản cache cũ
-                self.synonyms_cache[word] = {"synonyms": syns, "antonyms": ants, "source": "notion"}
+                self.synonyms_cache[word] = {
+                    "synonyms": syns, 
+                    "antonyms": ants, 
+                    "source": "notion",
+                    "page_text": page_text
+                }
                 save_synonyms_cache(self.synonyms_cache)
                 
             # Đọc lại từ cache
             cached_data = self.synonyms_cache.get(word, {})
             if not cached_data.get("synonyms") and not cached_data.get("antonyms"):
-                # Nếu cả hai đều không tìm thấy gì, tự động chuyển về Flashcard hoặc Trắc nghiệm dịch
-                self.review_mode = random.choice(["flashcard", "multiple_choice", "spelling", "scramble"])
+                # Nếu cả hai đều không tìm thấy gì, tự động chuyển về các chế độ thông thường
+                self.review_mode = random.choice(["flashcard", "multiple_choice", "spelling", "scramble", "listening"])
         
         # Tiến hành kết xuất giao diện dựa trên chế độ thực tế
         if self.review_mode == "flashcard":
@@ -328,6 +457,32 @@ class ReviewTab(ft.Column):
             
             self.scramble_quiz.show_quiz(True)
             self.scramble_quiz.set_quiz(item["word"])
+
+        elif self.review_mode == "listening":
+            # Ẩn từ gốc trên thẻ, hiện loa phóng thanh
+            self.word_card.lbl_word.value = "Listen and choose! 🎧"
+            self.word_card.btn_speak.visible = True
+            
+            # Che từ trong ngữ cảnh
+            hidden_context = item["context"]
+            if item["word"].lower() in hidden_context.lower():
+                insensitive_word = re.compile(re.escape(item["word"]), re.IGNORECASE)
+                hidden_context = insensitive_word.sub("_______", hidden_context)
+            self.word_card.set_context(hidden_context)
+            self.word_card.set_translation(item["translation"])
+            self.word_card.lbl_translation.visible = True
+            self.word_card.lbl_hint.visible = True
+            
+            self.lbl_flashcard_instruction.visible = False
+            self.choice_buttons.show_choices(True)
+            self.match_quiz.show_quiz(False)
+            self.spelling_quiz.show_quiz(False)
+            self.scramble_quiz.show_quiz(False)
+            
+            self.setup_listening_choices()
+            
+            # Phát âm thanh tự động lần đầu cho thính giác nhận diện
+            play_tts(item["word"])
         
         self.update_progress_ui()
         self.page_ref.update()
@@ -350,6 +505,29 @@ class ReviewTab(ft.Column):
             other_translations.append("Nghĩa bổ trợ " + str(len(other_translations) + 1))
             
         distractors = random.sample(other_translations, 3)
+        choices = [correct_ans] + distractors
+        random.shuffle(choices)
+        
+        self.choice_buttons.set_choices(choices, correct_ans)
+
+    def setup_listening_choices(self):
+        if not self.review_queue or self.current_index >= len(self.review_queue):
+            return
+            
+        current_item = self.review_queue[self.current_index]
+        correct_ans = current_item["word"]
+        
+        # Gather distinct incorrect English words from the database
+        other_words = [
+            item["word"] for item in self.vocab_list 
+            if item["word"].lower() != correct_ans.lower()
+        ]
+        other_words = list(set(other_words))
+        
+        while len(other_words) < 3:
+            other_words.append("word_" + str(len(other_words)))
+            
+        distractors = random.sample(other_words, 3)
         choices = [correct_ans] + distractors
         random.shuffle(choices)
         
@@ -379,9 +557,11 @@ class ReviewTab(ft.Column):
         self.word_card.set_translation(f"Dịch nghĩa từ gốc: {current_item['translation']}")
         
         # Tạo distractors từ danh sách từ vựng thông thường
+        syns_lower = [s.lower() for s in syns]
+        ants_lower = [a.lower() for a in ants]
         distractors_pool = [
             item["word"] for item in self.vocab_list 
-            if item["word"].lower() != word.lower() and item["word"] not in syns and item["word"] not in ants
+            if item["word"].lower() != word.lower() and item["word"].lower() not in syns_lower and item["word"].lower() not in ants_lower
         ]
         
         while len(distractors_pool) < 3:
@@ -419,9 +599,11 @@ class ReviewTab(ft.Column):
             correct_answers[a] = "antonym"
             
         # Thêm các từ không liên quan để lấp đầy 4 vị trí
+        syns_lower = [s.lower() for s in syns]
+        ants_lower = [a.lower() for a in ants]
         unrelated_pool = [
             item["word"] for item in self.vocab_list 
-            if item["word"].lower() != word.lower() and item["word"] not in syns and item["word"] not in ants
+            if item["word"].lower() != word.lower() and item["word"].lower() not in syns_lower and item["word"].lower() not in ants_lower
         ]
         needed = 4 - len(match_options)
         selected_unrelated = random.sample(unrelated_pool, min(needed, len(unrelated_pool))) if unrelated_pool else []
@@ -442,6 +624,7 @@ class ReviewTab(ft.Column):
 
     def handle_choice_selected(self, selected_ans, is_correct):
         # Reveal card answer
+        self.word_card.lbl_word.value = self.review_queue[self.current_index]["word"]
         self.word_card.reveal_translation(True)
         # Display SRS rating options
         self.setup_srs_ratings()
@@ -468,7 +651,16 @@ class ReviewTab(ft.Column):
         # Display SRS rating options
         self.setup_srs_ratings()
 
+    def handle_speak_word(self, e):
+        if self.review_queue and self.current_index < len(self.review_queue):
+            current_item = self.review_queue[self.current_index]
+            play_tts(current_item["word"])
+
     def setup_srs_ratings(self):
+        # Hiện các nút tiện ích xem chi tiết Notion khi đáp án đã lộ diện
+        self.btn_open_notion.visible = True
+        self.btn_view_details.visible = True
+        
         # Calculate intervals
         word = self.review_queue[self.current_index]["word"]
         item_srs = self.srs_data.get(word, {"ease_factor": 2.5, "repetitions": 0, "interval": 1})
@@ -485,6 +677,104 @@ class ReviewTab(ft.Column):
         self.srs_buttons.set_ratings(day_easy)
         self.srs_buttons.show_buttons(True)
         self.page_ref.update()
+
+    def handle_open_notion(self, e):
+        try:
+            if not self.review_queue or self.current_index >= len(self.review_queue):
+                return
+            current_item = self.review_queue[self.current_index]
+            url = current_item.get("url")
+            if url:
+                import webbrowser
+                webbrowser.open(url)
+            else:
+                self.page_ref.snack_bar = ft.SnackBar(content=ft.Text("Từ vựng này chưa có liên kết URL Notion. Vui lòng đồng bộ lại!"))
+                self.page_ref.snack_bar.open = True
+                self.page_ref.update()
+        except Exception as ex:
+            self.page_ref.snack_bar = ft.SnackBar(content=ft.Text(f"Lỗi mở link: {str(ex)}"))
+            self.page_ref.snack_bar.open = True
+            self.page_ref.update()
+
+    def handle_open_settings(self, e):
+        if self.settings_tab_ref:
+            dlg = ft.AlertDialog(
+                title=ft.Text("Notion Connection Settings ⚙️", weight=ft.FontWeight.BOLD),
+                content=ft.Container(
+                    content=self.settings_tab_ref,
+                    width=550,
+                    height=300
+                )
+            )
+            def close_dlg(e):
+                dlg.open = False
+                self.page_ref.update()
+            dlg.actions = [ft.TextButton(content=ft.Text("Đóng"), on_click=close_dlg)]
+            self.page_ref.overlay.append(dlg)
+            dlg.open = True
+            self.page_ref.update()
+
+    def handle_close_detail(self, e):
+        self.detail_panel.visible = False
+        self.detail_open = False
+        self.page_ref.window_width = 950
+        self.page_ref.update()
+
+    def handle_view_details(self, e):
+        try:
+            if not self.review_queue or self.current_index >= len(self.review_queue):
+                return
+            current_item = self.review_queue[self.current_index]
+            word = current_item["word"]
+            page_id = current_item.get("id")
+            
+            if not page_id or not self.notion_token:
+                self.page_ref.snack_bar = ft.SnackBar(content=ft.Text("Thiếu thông tin liên kết Notion hoặc Notion Token. Bấm nút ⚙️ để cấu hình!"))
+                self.page_ref.snack_bar.open = True
+                self.page_ref.update()
+                return
+
+            cached_data = self.synonyms_cache.get(word, {})
+            page_text = cached_data.get("page_text", "")
+
+            # Mở detail panel bên phải & mở rộng cửa sổ
+            self.detail_panel.visible = True
+            self.detail_open = True
+            self.page_ref.window_width = 1400
+
+            if page_text:
+                self.detail_markdown.value = page_text
+                self.page_ref.update()
+            else:
+                self.detail_markdown.value = "⌛ Đang tải dữ liệu trang từ Notion..."
+                self.page_ref.update()
+
+                def fetch_details():
+                    try:
+                        fetched_text = fetch_notion_page_blocks_text(page_id, self.notion_token)
+                        if not fetched_text:
+                            fetched_text = "Trang từ vựng rỗng hoặc không có dữ liệu chi tiết."
+                        
+                        cached = self.synonyms_cache.get(word, {})
+                        self.synonyms_cache[word] = {
+                            "synonyms": cached.get("synonyms", []),
+                            "antonyms": cached.get("antonyms", []),
+                            "source": "notion",
+                            "page_text": fetched_text
+                        }
+                        save_synonyms_cache(self.synonyms_cache)
+                        
+                        self.detail_markdown.value = fetched_text
+                    except Exception as ex:
+                        self.detail_markdown.value = f"⚠️ Lỗi tải chi tiết: {str(ex)}"
+                    self.page_ref.update()
+
+                threading.Thread(target=fetch_details, daemon=True).start()
+
+        except Exception as ex:
+            self.page_ref.snack_bar = ft.SnackBar(content=ft.Text(f"Lỗi: {str(ex)}"))
+            self.page_ref.snack_bar.open = True
+            self.page_ref.update()
 
     def handle_srs_rating(self, quality):
         if not self.review_queue or self.current_index >= len(self.review_queue):
