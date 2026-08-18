@@ -24,8 +24,9 @@
 
     /* Floating Trigger Button */
     .vocab-trigger {
-      position: absolute;
+      position: fixed;
       z-index: 2147483647;
+      pointer-events: auto;
       background: #ffffff;
       border: 2px solid var(--primary);
       border-radius: 50%;
@@ -56,7 +57,7 @@
 
     /* Tooltip Panel */
     .vocab-tooltip {
-      position: absolute;
+      position: fixed;
       z-index: 2147483647;
       background: var(--bg);
       border: 1px solid var(--border);
@@ -221,14 +222,16 @@
   // Tạo thẻ chứa extension và đưa vào body của trang web
   const container = document.createElement('div');
   container.id = 'vocabsaver-root';
-  container.style.position = 'absolute';
+  container.style.position = 'fixed';
   container.style.top = '0';
   container.style.left = '0';
-  container.style.width = '100%';
+  container.style.width = '0';
   container.style.height = '0';
   container.style.overflow = 'visible';
   container.style.zIndex = '2147483647';
-  document.body.appendChild(container);
+  container.style.pointerEvents = 'none';
+  // Append to documentElement (luôn tồn tại) thay vì body (có thể chưa sẵn sàng)
+  (document.body || document.documentElement).appendChild(container);
 
   // Tạo Shadow DOM
   const shadow = container.attachShadow({ mode: 'open' });
@@ -278,7 +281,10 @@
   let currentSelectionInfo = null;
 
   // Lắng nghe sự kiện bôi đen chữ
-  document.addEventListener('mouseup', handleTextSelection);
+  // Dùng capture phase (true) để chạy TRƯỚC khi trang web có thể chặn sự kiện
+  document.addEventListener('mouseup', handleTextSelection, true);
+  // Fallback: pointerup hoạt động trên một số trang chặn mouseup
+  document.addEventListener('pointerup', handleTextSelection, true);
 
   // Lắng nghe sự kiện click ngoài để ẩn các bảng điều khiển
   document.addEventListener('mousedown', function(e) {
@@ -294,7 +300,7 @@
         }
       }, 100);
     }
-  });
+  }, true);
 
   // Kiểm tra click có nằm trong Shadow DOM không
   function isClickInsideShadow(e) {
@@ -326,12 +332,12 @@
           const tooltipHeight = 220; // Chiều cao ước lượng của tooltip
           const fitsBelow = (rect.bottom + tooltipHeight) < window.innerHeight;
           
+          // Dùng viewport coords trực tiếp (fixed positioning không cần scrollY/scrollX)
           let triggerY;
           if (fitsBelow) {
-            triggerY = rect.bottom + 5 + window.scrollY;
+            triggerY = rect.bottom + 5;
           } else {
-            // Hiển thị phía trên (chiều cao nút mèo là 38px + 6px khoảng cách)
-            triggerY = rect.top - 44 + window.scrollY;
+            triggerY = rect.top - 44;
           }
 
           // Lưu thông tin từ vựng tạm thời
@@ -350,8 +356,7 @@
             }
           };
 
-          // Đặt vị trí cho nút trigger (x-offset là 19px vì nút hình mèo rộng 38px)
-          showTrigger(rect.left + rect.width / 2 + window.scrollX, triggerY);
+          showTrigger(rect.left + rect.width / 2, triggerY);
         }
       } else {
         // Nếu click nơi khác hoặc bỏ chọn, ẩn nút trigger (nhưng không ẩn tooltip nếu đang mở)
@@ -373,7 +378,7 @@
   }
 
   function showTooltip(rect, fitsBelow) {
-    // Đảm bảo tooltip nằm gọn trong màn hình
+    // Dùng viewport coords trực tiếp (fixed positioning)
     const width = 280;
     let left = (rect.left + rect.width / 2) - width / 2;
     if (left < 10) left = 10;
@@ -383,17 +388,15 @@
 
     let top;
     if (fitsBelow) {
-      // Hiển thị ở dưới selection
-      top = rect.bottom + 5 + window.scrollY;
+      top = rect.bottom + 5;
     } else {
-      // Hiển thị ở trên selection (chiều cao ước lượng là 200px)
-      top = rect.top - 215 + window.scrollY;
-      if (top < window.scrollY + 10) {
-        top = window.scrollY + 10; // Tránh tràn lên mép trên trang
+      top = rect.top - 215;
+      if (top < 10) {
+        top = 10;
       }
     }
 
-    tooltip.style.left = `${left + window.scrollX}px`;
+    tooltip.style.left = `${left}px`;
     tooltip.style.top = `${top}px`;
     tooltip.classList.add('active');
   }
