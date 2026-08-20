@@ -3,12 +3,16 @@ import re
 import random
 import threading
 import subprocess
+import os
+import json
 import flet as ft
 from ui.theme import *
 from srs import update_srs_item
 from config import save_synonyms_cache
 from notion_api import fetch_synonyms_antonyms, fetch_notion_page_blocks_text
 from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz, ScrambleQuiz
+
+SESSION_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "review_session.json")
 
 # Bộ phát âm thanh Text-To-Speech ngoại tuyến thông qua Windows Speech API (SAPI)
 def play_tts(word):
@@ -252,9 +256,18 @@ class ReviewTab(ft.Column):
 
     def build_review_queue(self, vocab_list):
         self.vocab_list = vocab_list
+        today = datetime.date.today().isoformat()
+        
+        # Thử phục hồi session hôm nay (nếu restart app trong cùng ngày)
+        restored = self.load_session(today)
+        if restored:
+            self.update_progress_ui()
+            self.show_current_card()
+            return
+        
+        # Tạo session mới
         self.review_queue = []
         self.current_index = 0
-        today = datetime.date.today().isoformat()
         
         due_words = []
         for item in self.vocab_list:
@@ -288,9 +301,70 @@ class ReviewTab(ft.Column):
                 ])
             else:
                 item["quiz_type"] = random.choice(["flashcard", "multiple_choice", "spelling", "scramble", "listening"])
-                
+        
+        self.save_session(today)
         self.update_progress_ui()
         self.show_current_card()
+
+    def save_session(self, today):
+        """Lưu session ôn tập hôm nay ra file để phục hồi khi restart."""
+        try:
+            session = {
+                "date": today,
+                "queue_words": [item["word"] for item in self.review_queue],
+                "quiz_types": {item["word"]: item.get("quiz_type", "flashcard") for item in self.review_queue},
+                "current_index": self.current_index
+            }
+            with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                json.dump(session, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def load_session(self, today):
+        """Phục hồi session nếu cùng ngày. Trả về True nếu thành công."""
+        try:
+            if not os.path.exists(SESSION_FILE):
+                return False
+            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                session = json.load(f)
+            
+            if session.get("date") != today:
+                return False
+            
+            queue_words = session.get("queue_words", [])
+            quiz_types = session.get("quiz_types", {})
+            
+            if not queue_words:
+                return False
+            
+            # Xây lại review_queue từ danh sách từ đã lưu, giữ nguyên thứ tự
+            word_to_item = {item["word"]: item for item in self.vocab_list}
+            self.review_queue = []
+            for w in queue_words:
+                if w in word_to_item:
+                    item = word_to_item[w]
+                    item["quiz_type"] = quiz_types.get(w, "flashcard")
+                    self.review_queue.append(item)
+            
+            if not self.review_queue:
+                return False
+            
+            # Bỏ qua các từ đã ôn (next_review > today = đã được đánh giá SRS hôm nay)
+            self.current_index = 0
+            for i, item in enumerate(self.review_queue):
+                word = item["word"]
+                srs_entry = self.srs_data.get(word, {})
+                next_rev = srs_entry.get("next_review", "")
+                if next_rev > today:
+                    # Từ này đã được ôn hôm nay, nhảy qua
+                    self.current_index = i + 1
+                else:
+                    # Gặp từ chưa ôn → bắt đầu từ đây
+                    break
+            
+            return True
+        except Exception:
+            return False
         
     def update_progress_ui(self):
         total = len(self.review_queue)
@@ -791,4 +865,8 @@ class ReviewTab(ft.Column):
         
         # Next card
         self.current_index += 1
+        
+        # Lưu tiến trình session để phục hồi khi restart
+        self.save_session(datetime.date.today().isoformat())
+        
         self.show_current_card()
