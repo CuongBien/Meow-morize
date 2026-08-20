@@ -346,13 +346,14 @@ class ReviewTab(ft.Column):
                 if self.notion_token and item.get("id"):
                     page_text = fetch_notion_page_blocks_text(item["id"], self.notion_token)
                     if page_text:
-                        syn_match = re.search(r"^\s*đồng\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
+                        # Regex linh hoạt: cho phép dấu - , * , số thứ tự, khoảng trắng ở đầu dòng
+                        syn_match = re.search(r"^[\s\-\*\d\.]*đồng\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
                         if syn_match:
-                            syns = [s.strip() for s in syn_match.group(1).split(",") if s.strip()]
+                            syns = [s.strip().rstrip('.').strip() for s in syn_match.group(1).split(",") if s.strip().rstrip('.').strip()]
                         
-                        ant_match = re.search(r"^\s*trái\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
+                        ant_match = re.search(r"^[\s\-\*\d\.]*trái\s+nghĩa\s*:\s*([^\n]+)", page_text, re.IGNORECASE | re.MULTILINE)
                         if ant_match:
-                            ants = [a.strip() for a in ant_match.group(1).split(",") if a.strip()]
+                            ants = [a.strip().rstrip('.').strip() for a in ant_match.group(1).split(",") if a.strip().rstrip('.').strip()]
                 
                 # 2. Nếu Notion rỗng, fallback sang gọi API Từ điển công cộng
                 if not syns and not ants:
