@@ -31,5 +31,6 @@ package-lock.json
 desktop-app/config.json
 desktop-app/srs_data.json
 desktop-app/synonyms_cache.json
+desktop-app/review_session.json
 
 

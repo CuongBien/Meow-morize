@@ -270,16 +270,24 @@ class ReviewTab(ft.Column):
         self.current_index = 0
         
         due_words = []
+        other_words = []
+        
         for item in self.vocab_list:
             word = item["word"]
             if word not in self.srs_data or self.srs_data[word]["next_review"] <= today:
                 due_words.append(item)
+            else:
+                other_words.append(item)
                 
-        # Trộn ngẫu nhiên danh sách ôn tập hôm nay
+        # Trộn ngẫu nhiên các từ đến hạn hôm nay
         random.shuffle(due_words)
         
-        # Giới hạn tối đa 50 từ mỗi ngày
-        self.review_queue = due_words[:50]
+        # Sắp xếp các từ chưa đến hạn theo ngày ôn tiếp theo gần nhất
+        other_words.sort(key=lambda item: self.srs_data.get(item["word"], {}).get("next_review", "9999-12-31"))
+        
+        # Ưu tiên các từ đến hạn trước, nếu chưa đủ 50 từ thì bổ sung thêm các từ sắp đến hạn
+        combined = due_words + other_words
+        self.review_queue = combined[:50]
         
         # Gán ngẫu nhiên chế độ câu hỏi cho từng từ
         for item in self.review_queue:
@@ -288,7 +296,7 @@ class ReviewTab(ft.Column):
             syns = cached_data.get("synonyms", [])
             ants = cached_data.get("antonyms", [])
             
-            # Gán ngẫu nhiên giữa 7 chế độ: flashcard, multiple_choice, spelling, scramble, listening, synonym_antonym_choice, synonym_antonym_match
+            # Gán ngẫu nhiên giữa 7 chế độ câu hỏi
             if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
                 item["quiz_type"] = random.choice([
                     "flashcard", 
@@ -349,18 +357,10 @@ class ReviewTab(ft.Column):
             if not self.review_queue:
                 return False
             
-            # Bỏ qua các từ đã ôn (next_review > today = đã được đánh giá SRS hôm nay)
-            self.current_index = 0
-            for i, item in enumerate(self.review_queue):
-                word = item["word"]
-                srs_entry = self.srs_data.get(word, {})
-                next_rev = srs_entry.get("next_review", "")
-                if next_rev > today:
-                    # Từ này đã được ôn hôm nay, nhảy qua
-                    self.current_index = i + 1
-                else:
-                    # Gặp từ chưa ôn → bắt đầu từ đây
-                    break
+            # Đọc vị trí current_index đã lưu chính xác từ session
+            self.current_index = session.get("current_index", 0)
+            if self.current_index >= len(self.review_queue):
+                self.current_index = len(self.review_queue)
             
             return True
         except Exception:
