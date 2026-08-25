@@ -91,7 +91,7 @@ class ReviewTab(ft.Column):
             spacing=10
         )
 
-        self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
+        self.progress_bar = ft.ProgressBar(value=0, width=560, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Bấm nút ⚙️ để cấu hình Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
         
         # 8. Các nút tiện ích (Xem chi tiết Notion & Mở link Notion)
@@ -129,7 +129,7 @@ class ReviewTab(ft.Column):
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             alignment=ft.MainAxisAlignment.CENTER,
-            width=380,
+            width=460,
             spacing=10
         )
 
@@ -177,12 +177,12 @@ class ReviewTab(ft.Column):
                 ft.Row(
                     controls=[
                         self.left_column,
-                        ft.VerticalDivider(color=COLOR_BORDER, width=20),
+                        ft.VerticalDivider(color=COLOR_BORDER, width=30),
                         self.interaction_panel
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=20
+                    spacing=30
                 ),
                 ft.Container(height=15),
                 self.anki_counter_bar,
@@ -693,7 +693,7 @@ class ReviewTab(ft.Column):
         syns = cached_data.get("synonyms", [])
         ants = cached_data.get("antonyms", [])
         
-        self.word_card.set_context("Đánh dấu mỗi từ bên phải là Đồng nghĩa (Synonym) hay Trái nghĩa (Antonym) so với từ trên:")
+        self.word_card.set_context("Phân loại mỗi từ bên phải: Đồng nghĩa (Synonym), Trái nghĩa (Antonym), hay Không thuộc loại nào (Neither):")
         self.word_card.set_translation(f"Dịch nghĩa từ gốc: {current_item['translation']}")
         
         match_options = []
@@ -893,9 +893,23 @@ class ReviewTab(ft.Column):
         self.save_srs_data_fn(self.srs_data)
         
         # Nếu thẻ chưa tốt nghiệp (bấm Again 1m hoặc Hard 10m trên từ mới/đang học hoặc Again trên review card):
-        # Chèn lại từ này vào phía sau trong phiên học hôm nay để người học gặp lại trong phiên
+        # Chèn lại từ này vào vị trí xa hơn (+6 đến +10 thẻ sau) và ngẫu nhiên lại dạng bài tập mới
         if not graduated:
-            insert_pos = min(len(self.review_queue), self.current_index + 4)
+            cached_data = self.synonyms_cache.get(word, {})
+            syns = cached_data.get("synonyms", [])
+            ants = cached_data.get("antonyms", [])
+            if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
+                current_item["quiz_type"] = random.choice([
+                    "flashcard", "multiple_choice", "spelling", "scramble", "listening",
+                    "synonym_antonym_choice", "synonym_antonym_match"
+                ])
+            else:
+                current_item["quiz_type"] = random.choice([
+                    "flashcard", "multiple_choice", "spelling", "scramble", "listening"
+                ])
+
+            offset = random.randint(6, 10)
+            insert_pos = min(len(self.review_queue), self.current_index + offset)
             self.review_queue.insert(insert_pos, current_item)
         
         # Chuyển sang thẻ tiếp theo

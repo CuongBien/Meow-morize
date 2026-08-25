@@ -17,7 +17,7 @@ class SpellingQuiz(ft.Column):
         # Ô nhập liệu từ vựng
         self.tf_answer = ft.TextField(
             label="Nhập từ vựng tiếng Anh...",
-            width=380,
+            width=440,
             autofocus=True,
             on_submit=self.on_submit_click
         )
@@ -33,27 +33,27 @@ class SpellingQuiz(ft.Column):
         
         # Nút chức năng
         self.btn_hint = ft.Button(
-            content=ft.Text("Gợi ý 💡"),
+            content=ft.Text("Gợi ý 💡", size=14),
             bgcolor=COLOR_BG_CARD,
             color=COLOR_TEXT_MUTED,
-            width=180,
-            height=40,
+            width=210,
+            height=44,
             on_click=self.on_hint_click
         )
         
         self.btn_submit = ft.Button(
-            content=ft.Text("Kiểm tra 📝"),
+            content=ft.Text("Kiểm tra 📝", size=14),
             bgcolor=COLOR_PRIMARY,
             color="#ffffff",
-            width=180,
-            height=40,
+            width=210,
+            height=44,
             on_click=self.on_submit_click
         )
         
         buttons_row = ft.Row(
             controls=[self.btn_hint, self.btn_submit],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=10
+            spacing=15
         )
         
         self.controls = [

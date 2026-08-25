@@ -6,7 +6,7 @@ class ChoiceButtons(ft.Column):
         super().__init__()
         self.on_choice_click = on_choice_click
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        self.spacing = 10
+        self.spacing = 12
         self.visible = False
         self.choices = []
         self.correct_answer = ""
@@ -16,9 +16,9 @@ class ChoiceButtons(ft.Column):
         self.btns = []
         for i in range(4):
             btn = ft.Button(
-                content=ft.Text(f"Choice {i+1}"),
-                width=380,
-                height=45,
+                content=ft.Text(f"Choice {i+1}", size=15, weight=ft.FontWeight.W_500),
+                width=440,
+                height=48,
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_PRIMARY,
                 on_click=self.make_click_handler(i)

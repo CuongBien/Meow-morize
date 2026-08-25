@@ -6,7 +6,7 @@ class MatchQuiz(ft.Column):
         super().__init__()
         self.on_verify = on_verify
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        self.spacing = 12
+        self.spacing = 10
         self.visible = False
         
         self.items = []
@@ -18,76 +18,87 @@ class MatchQuiz(ft.Column):
         self.item_views = []
         
         for i in range(4):
-            lbl_word = ft.Text("Word", size=15, weight=ft.FontWeight.W_500, width=130)
+            lbl_word = ft.Text("Word", size=13, weight=ft.FontWeight.W_500, width=110, overflow=ft.TextOverflow.ELLIPSIS)
             
-            # Nút chọn Đồng nghĩa (Không dùng emoji trong text để tránh xuống dòng)
+            # Nút chọn Đồng nghĩa
             btn_syn = ft.Button(
-                content=ft.Text("Synonym", size=12),
+                content=ft.Text("Synonym", size=11, weight=ft.FontWeight.W_500),
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_MUTED,
-                width=100,
-                height=35,
+                width=95,
+                height=36,
                 on_click=self.make_select_handler(i, "synonym")
             )
             
-            # Nút chọn Trái nghĩa (Không dùng emoji trong text để tránh xuống dòng)
+            # Nút chọn Trái nghĩa
             btn_ant = ft.Button(
-                content=ft.Text("Antonym", size=12),
+                content=ft.Text("Antonym", size=11, weight=ft.FontWeight.W_500),
                 bgcolor=COLOR_BG_CARD,
                 color=COLOR_TEXT_MUTED,
-                width=100,
-                height=35,
+                width=95,
+                height=36,
                 on_click=self.make_select_handler(i, "antonym")
+            )
+
+            # Nút chọn Không thuộc loại nào (Neither / Unrelated)
+            btn_none = ft.Button(
+                content=ft.Text("Neither", size=11, weight=ft.FontWeight.W_500),
+                bgcolor=COLOR_BG_CARD,
+                color=COLOR_TEXT_MUTED,
+                width=95,
+                height=36,
+                on_click=self.make_select_handler(i, "unrelated")
             )
             
             row = ft.Row(
-                controls=[lbl_word, btn_syn, btn_ant],
+                controls=[lbl_word, btn_syn, btn_ant, btn_none],
                 alignment=ft.MainAxisAlignment.CENTER,
-                spacing=12
+                spacing=6
             )
             self.rows.append(row)
             self.item_views.append({
                 "lbl_word": lbl_word,
                 "btn_syn": btn_syn,
                 "btn_ant": btn_ant,
+                "btn_none": btn_none,
                 "selection": None
             })
             
         self.btn_verify = ft.Button(
-            content=ft.Text("Verify 🔍"),
+            content=ft.Text("Verify 🔍", size=14, weight=ft.FontWeight.W_500),
             bgcolor=COLOR_PRIMARY,
             color="#ffffff",
-            width=180,
+            width=200,
             height=40,
             on_click=self.on_verify_click
         )
         
-        self.controls = self.rows + [ft.Container(height=5), self.btn_verify]
+        self.controls = self.rows + [ft.Container(height=8), self.btn_verify]
 
     def make_select_handler(self, index, choice_type):
         def handle_select(e):
             view = self.item_views[index]
             if view["selection"] == choice_type:
-                # Bỏ chọn nếu nhấp lại cùng một nút
                 view["selection"] = None
-                view["btn_syn"].bgcolor = COLOR_BG_CARD
-                view["btn_syn"].color = COLOR_TEXT_MUTED
-                view["btn_ant"].bgcolor = COLOR_BG_CARD
-                view["btn_ant"].color = COLOR_TEXT_MUTED
             else:
                 view["selection"] = choice_type
-                if choice_type == "synonym":
-                    view["btn_syn"].bgcolor = COLOR_PRIMARY
-                    view["btn_syn"].color = "#ffffff"
-                    view["btn_ant"].bgcolor = COLOR_BG_CARD
-                    view["btn_ant"].color = COLOR_TEXT_MUTED
-                else:
-                    view["btn_ant"].bgcolor = COLOR_PRIMARY
-                    view["btn_ant"].color = "#ffffff"
-                    view["btn_syn"].bgcolor = COLOR_BG_CARD
-                    view["btn_syn"].color = COLOR_TEXT_MUTED
-            self.update()
+            
+            self.render_item_state(index)
         return handle_select
+
+    def render_item_state(self, index):
+        view = self.item_views[index]
+        sel = view["selection"]
+
+        for ctype, btn_key in [("synonym", "btn_syn"), ("antonym", "btn_ant"), ("unrelated", "btn_none")]:
+            btn = view[btn_key]
+            if sel == ctype:
+                btn.bgcolor = COLOR_PRIMARY
+                btn.color = "#ffffff"
+            else:
+                btn.bgcolor = COLOR_BG_CARD
+                btn.color = COLOR_TEXT_MUTED
+        self.update()
 
     def set_quiz(self, words_list, correct_answers):
         self.correct_answers = correct_answers
@@ -98,14 +109,11 @@ class MatchQuiz(ft.Column):
             view["lbl_word"].value = word
             view["selection"] = None
             
-            # Reset trạng thái màu sắc
-            view["btn_syn"].bgcolor = COLOR_BG_CARD
-            view["btn_syn"].color = COLOR_TEXT_MUTED
-            view["btn_syn"].disabled = False
-            
-            view["btn_ant"].bgcolor = COLOR_BG_CARD
-            view["btn_ant"].color = COLOR_TEXT_MUTED
-            view["btn_ant"].disabled = False
+            for btn_key in ["btn_syn", "btn_ant", "btn_none"]:
+                btn = view[btn_key]
+                btn.bgcolor = COLOR_BG_CARD
+                btn.color = COLOR_TEXT_MUTED
+                btn.disabled = False
             
         self.btn_verify.disabled = False
         self.update()
@@ -113,43 +121,35 @@ class MatchQuiz(ft.Column):
     def on_verify_click(self, e):
         self.btn_verify.disabled = True
         
-        # Kiểm tra và tô màu đúng/sai
         for i in range(4):
             view = self.item_views[i]
             word = view["lbl_word"].value
             correct_rel = self.correct_answers.get(word, "unrelated")
             user_sel = view["selection"]
-            normalized_user_sel = user_sel if user_sel is not None else "unrelated"
             
-            # Khóa nút
             view["btn_syn"].disabled = True
             view["btn_ant"].disabled = True
+            view["btn_none"].disabled = True
             
-            # Nếu người dùng chọn đúng
-            if normalized_user_sel == correct_rel:
-                if correct_rel == "synonym":
-                    view["btn_syn"].bgcolor = COLOR_SUCCESS_DARK
-                    view["btn_syn"].color = COLOR_TEXT_PRIMARY
-                elif correct_rel == "antonym":
-                    view["btn_ant"].bgcolor = COLOR_SUCCESS_DARK
-                    view["btn_ant"].color = COLOR_TEXT_PRIMARY
-            else:
-                # Nếu người dùng chọn sai, tô đỏ lựa chọn sai của họ
-                if user_sel == "synonym":
-                    view["btn_syn"].bgcolor = COLOR_ERROR_DARK
-                    view["btn_syn"].color = COLOR_TEXT_PRIMARY
-                elif user_sel == "antonym":
-                    view["btn_ant"].bgcolor = COLOR_ERROR_DARK
-                    view["btn_ant"].color = COLOR_TEXT_PRIMARY
-                    
-                # Đồng thời tô xanh lá cây đáp án ĐÚNG (nếu có) để người dùng học
-                if correct_rel == "synonym":
-                    view["btn_syn"].bgcolor = COLOR_SUCCESS_DARK
-                    view["btn_syn"].color = COLOR_TEXT_PRIMARY
-                elif correct_rel == "antonym":
-                    view["btn_ant"].bgcolor = COLOR_SUCCESS_DARK
-                    view["btn_ant"].color = COLOR_TEXT_PRIMARY
-                    
+            btn_map = {
+                "synonym": view["btn_syn"],
+                "antonym": view["btn_ant"],
+                "unrelated": view["btn_none"]
+            }
+
+            for b in btn_map.values():
+                b.bgcolor = COLOR_BG_CARD
+                b.color = COLOR_TEXT_MUTED
+
+            if correct_rel in btn_map:
+                btn_map[correct_rel].bgcolor = COLOR_SUCCESS_DARK
+                btn_map[correct_rel].color = COLOR_TEXT_PRIMARY
+
+            if user_sel and user_sel != correct_rel:
+                if user_sel in btn_map:
+                    btn_map[user_sel].bgcolor = COLOR_ERROR_DARK
+                    btn_map[user_sel].color = COLOR_TEXT_PRIMARY
+
         self.update()
         
         if self.on_verify:

@@ -7,8 +7,8 @@ from ui.settings_tab import SettingsTab
 
 def main(page: ft.Page):
     page.title = "Meow-morize Desktop Review App 🐾"
-    page.window_width = 950
-    page.window_height = 680
+    page.window_width = 1050
+    page.window_height = 720
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed=COLOR_PRIMARY)
     page.vertical_alignment = ft.MainAxisAlignment.START

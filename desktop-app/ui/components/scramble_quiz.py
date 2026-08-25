@@ -7,7 +7,7 @@ class ScrambleQuiz(ft.Column):
         super().__init__()
         self.on_correct = on_correct
         self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        self.spacing = 8  # Giảm spacing dọc để tránh tràn màn hình
+        self.spacing = 10
         self.visible = False
         
         self.correct_word = ""
@@ -15,10 +15,10 @@ class ScrambleQuiz(ft.Column):
         self.user_selections = []
         
         # Các biến lưu kích cỡ động theo chiều dài của từ
-        self.slot_size = 38
-        self.slot_font = 18
-        self.btn_size = 45
-        self.btn_font = 16
+        self.slot_size = 42
+        self.slot_font = 20
+        self.btn_size = 48
+        self.btn_font = 18
         
         self.init_ui()
 
@@ -28,7 +28,7 @@ class ScrambleQuiz(ft.Column):
             wrap=True,
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
-            width=380
+            width=440
         )
         
         # Khung chứa các chữ cái xáo trộn bên dưới để chọn
@@ -36,16 +36,16 @@ class ScrambleQuiz(ft.Column):
             wrap=True,
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=10,
-            width=380
+            width=440
         )
         
         # Nút Reset
         self.btn_reset = ft.Button(
-            content=ft.Text("Reset 🔄"),
+            content=ft.Text("Reset 🔄", size=13),
             bgcolor=COLOR_BG_CARD,
             color=COLOR_TEXT_MUTED,
-            width=150,
-            height=36,
+            width=160,
+            height=38,
             on_click=self.on_reset_click
         )
         
@@ -60,29 +60,28 @@ class ScrambleQuiz(ft.Column):
         self.correct_word = correct_word.strip()
         n = len(self.correct_word)
         
-        # 1. Tính toán kích thước ô chữ (slots) và nút bấm (buttons) động theo độ dài từ để không bị xuống dòng tràn màn hình
+        # 1. Tính toán kích thước ô chữ (slots) và nút bấm (buttons) động theo độ dài từ
         if n <= 7:
-            self.slot_size = 38
-            self.slot_font = 18
+            self.slot_size = 42
+            self.slot_font = 20
             slot_spacing = 8
-            self.btn_size = 45
-            self.btn_font = 16
+            self.btn_size = 48
+            self.btn_font = 18
             btn_spacing = 10
         elif n <= 11:
-            self.slot_size = 28
-            self.slot_font = 13
-            slot_spacing = 5
-            self.btn_size = 34
-            self.btn_font = 12
-            btn_spacing = 6
+            self.slot_size = 32
+            self.slot_font = 15
+            slot_spacing = 6
+            self.btn_size = 38
+            self.btn_font = 14
+            btn_spacing = 8
         else:
-            # Cho các từ cực kỳ dài như 'recommendations'
-            self.slot_size = 20
-            self.slot_font = 10
-            slot_spacing = 3
-            self.btn_size = 26
-            self.btn_font = 9
-            btn_spacing = 4
+            self.slot_size = 24
+            self.slot_font = 12
+            slot_spacing = 4
+            self.btn_size = 30
+            self.btn_font = 11
+            btn_spacing = 5
             
         self.slots_row.spacing = slot_spacing
         self.letters_row.spacing = btn_spacing
@@ -106,9 +105,9 @@ class ScrambleQuiz(ft.Column):
                 alignment=ft.Alignment(0, 0),
                 width=self.slot_size,
                 height=self.slot_size,
-                border_radius=6 if n > 7 else 8,
+                border_radius=8,
                 bgcolor=COLOR_BG_CARD,
-                border=ft.Border.all(1, COLOR_BORDER)
+                border=ft.Border.all(1.5, COLOR_BORDER)
             )
             self.slots_row.controls.append(slot)
             
@@ -130,7 +129,6 @@ class ScrambleQuiz(ft.Column):
         self.update_ui_state()
 
     def update_ui_state(self):
-        # 1. Cập nhật các ô Slots
         n = len(self.correct_word)
         for i in range(n):
             slot = self.slots_row.controls[i]
@@ -144,7 +142,6 @@ class ScrambleQuiz(ft.Column):
                 slot.bgcolor = COLOR_BG_CARD
                 slot.border = ft.Border.all(1, COLOR_BORDER)
         
-        # 2. Cập nhật trạng thái các nút lựa chọn
         for btn in self.letters_row.controls:
             orig_idx = btn.data
             is_used = orig_idx in self.user_selections
@@ -154,7 +151,6 @@ class ScrambleQuiz(ft.Column):
             
         self.update()
         
-        # 3. Tự động kiểm tra kết quả khi đã điền đủ các ô
         if len(self.user_selections) == len(self.correct_word):
             self.check_answer()
 
@@ -175,7 +171,6 @@ class ScrambleQuiz(ft.Column):
     def check_answer(self):
         constructed = "".join([self.correct_word[idx] for idx in self.user_selections])
         if constructed.lower() == self.correct_word.lower():
-            # Ghép đúng: Tô xanh lá nhẹ và đổi màu chữ thành màu xanh
             for slot in self.slots_row.controls:
                 slot.bgcolor = COLOR_SUCCESS_DARK
                 slot.border = ft.Border.all(1.5, COLOR_SUCCESS)
@@ -189,7 +184,6 @@ class ScrambleQuiz(ft.Column):
             if self.on_correct:
                 self.on_correct()
         else:
-            # Ghép sai: Tô đỏ nhẹ và đổi màu chữ thành đỏ
             for slot in self.slots_row.controls:
                 slot.bgcolor = COLOR_ERROR_DARK
                 slot.border = ft.Border.all(1.5, COLOR_ERROR)
