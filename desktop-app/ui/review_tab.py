@@ -303,8 +303,8 @@ class ReviewTab(ft.Column):
         random.shuffle(learning_words)
         random.shuffle(new_words)
         
-        # Không giới hạn 50 từ: đưa TOÀN BỘ từ cần học/ôn trong ngày vào danh sách (Review -> Learn -> New)
-        self.review_queue = due_review_words + learning_words + new_words
+        # Đưa toàn bộ từ cần ôn (Review) + đang học (Learn) + tối đa 20 từ mới (New) vào phiên học
+        self.review_queue = due_review_words + learning_words + new_words[:20]
         
         # Gán ngẫu nhiên chế độ câu hỏi cho từng từ
         for item in self.review_queue:
