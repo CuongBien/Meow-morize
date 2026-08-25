@@ -21,11 +21,27 @@ class SRSButtons(ft.Column):
             ft.Row([self.btn_good, self.btn_easy], alignment=ft.MainAxisAlignment.CENTER, spacing=10)
         ]
 
-    def set_ratings(self, day_easy):
-        self.btn_again.content.value = "Again ❌ (1d)"
-        self.btn_hard.content.value = f"Hard ⚠️ ({max(1, int(day_easy*0.5))}d)"
-        self.btn_good.content.value = f"Good 👍 ({max(2, int(day_easy*0.8))}d)"
-        self.btn_easy.content.value = f"Easy 🎉 ({day_easy}d)"
+    def set_ratings(self, previews):
+        if isinstance(previews, dict):
+            again_val = str(previews.get(1, "1m"))
+            hard_val = str(previews.get(3, "10m"))
+            good_val = str(previews.get(4, "1d"))
+            easy_val = str(previews.get(5, "4d"))
+        else:
+            again_val = "1d"
+            hard_val = f"{max(1, int(previews * 0.5))}d"
+            good_val = f"{max(2, int(previews * 0.8))}d"
+            easy_val = f"{previews}d"
+
+        again_str = again_val if any(again_val.endswith(x) for x in ['m', 'd']) else f"{again_val}d"
+        hard_str = hard_val if any(hard_val.endswith(x) for x in ['m', 'd']) else f"{hard_val}d"
+        good_str = good_val if any(good_val.endswith(x) for x in ['m', 'd']) else f"{good_val}d"
+        easy_str = easy_val if any(easy_val.endswith(x) for x in ['m', 'd']) else f"{easy_val}d"
+
+        self.btn_again.content.value = f"Again ❌ ({again_str})"
+        self.btn_hard.content.value = f"Hard ⚠️ ({hard_str})"
+        self.btn_good.content.value = f"Good 👍 ({good_str})"
+        self.btn_easy.content.value = f"Easy 🎉 ({easy_str})"
         self.update()
 
     def trigger_rate(self, quality):

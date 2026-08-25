@@ -7,7 +7,7 @@ import os
 import json
 import flet as ft
 from ui.theme import *
-from srs import update_srs_item
+from srs import update_srs_item, calculate_anki_previews
 from config import save_synonyms_cache
 from notion_api import fetch_synonyms_antonyms, fetch_notion_page_blocks_text
 from ui.components import WordCard, SRSButtons, ChoiceButtons, MatchQuiz, SpellingQuiz, ScrambleQuiz
@@ -80,7 +80,17 @@ class ReviewTab(ft.Column):
         # 7. SRS Buttons Component (Phản hồi chất lượng ghi nhớ)
         self.srs_buttons = SRSButtons(on_rate_click=self.handle_srs_rating)
 
-        # 7.5. Progress UI Components
+        # 7.5. Progress UI Components (Anki 3-Color Badge Bar + Progress Bar)
+        self.badge_new = ft.Container(content=ft.Text("🔵 New: 0", size=12, weight=ft.FontWeight.BOLD, color="#1d4ed8"), bgcolor="#eff6ff", padding=ft.Padding(8, 3, 8, 3), border_radius=10, border=ft.Border.all(1, "#bfdbfe"))
+        self.badge_learn = ft.Container(content=ft.Text("🟠 Learn: 0", size=12, weight=ft.FontWeight.BOLD, color="#b45309"), bgcolor="#fffbeb", padding=ft.Padding(8, 3, 8, 3), border_radius=10, border=ft.Border.all(1, "#fde68a"))
+        self.badge_review = ft.Container(content=ft.Text("🟢 Review: 0", size=12, weight=ft.FontWeight.BOLD, color="#047857"), bgcolor="#ecfdf5", padding=ft.Padding(8, 3, 8, 3), border_radius=10, border=ft.Border.all(1, "#a7f3d0"))
+
+        self.anki_counter_bar = ft.Row(
+            controls=[self.badge_new, self.badge_learn, self.badge_review],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10
+        )
+
         self.progress_bar = ft.ProgressBar(value=0, width=500, color=COLOR_PRIMARY_LIGHT, bgcolor=COLOR_BG_PROGRESS)
         self.lbl_progress = ft.Text(value="Chưa kết nối dữ liệu. Bấm nút ⚙️ để cấu hình Notion 🔄", size=13, color=COLOR_TEXT_MUTED)
         
@@ -174,7 +184,9 @@ class ReviewTab(ft.Column):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=20
                 ),
-                ft.Container(height=20),
+                ft.Container(height=15),
+                self.anki_counter_bar,
+                ft.Container(height=8),
                 self.progress_bar,
                 self.lbl_progress
             ],
@@ -269,25 +281,30 @@ class ReviewTab(ft.Column):
         self.review_queue = []
         self.current_index = 0
         
-        due_words = []
-        other_words = []
+        due_review_words = []
+        learning_words = []
+        new_words = []
         
         for item in self.vocab_list:
             word = item["word"]
-            if word not in self.srs_data or self.srs_data[word]["next_review"] <= today:
-                due_words.append(item)
-            else:
-                other_words.append(item)
+            srs_entry = self.srs_data.get(word, {})
+            state = srs_entry.get("state", "new" if "repetitions" not in srs_entry else "review")
+            next_rev = srs_entry.get("next_review", "")
+            
+            if word not in self.srs_data or state == "new":
+                new_words.append(item)
+            elif state == "learning":
+                learning_words.append(item)
+            elif next_rev <= today:
+                due_review_words.append(item)
                 
-        # Trộn ngẫu nhiên các từ đến hạn hôm nay
-        random.shuffle(due_words)
+        # Trộn ngẫu nhiên từng nhóm
+        random.shuffle(due_review_words)
+        random.shuffle(learning_words)
+        random.shuffle(new_words)
         
-        # Sắp xếp các từ chưa đến hạn theo ngày ôn tiếp theo gần nhất
-        other_words.sort(key=lambda item: self.srs_data.get(item["word"], {}).get("next_review", "9999-12-31"))
-        
-        # Ưu tiên các từ đến hạn trước, nếu chưa đủ 50 từ thì bổ sung thêm các từ sắp đến hạn
-        combined = due_words + other_words
-        self.review_queue = combined[:50]
+        # Không giới hạn 50 từ: đưa TOÀN BỘ từ cần học/ôn trong ngày vào danh sách (Review -> Learn -> New)
+        self.review_queue = due_review_words + learning_words + new_words
         
         # Gán ngẫu nhiên chế độ câu hỏi cho từng từ
         for item in self.review_queue:
@@ -296,7 +313,6 @@ class ReviewTab(ft.Column):
             syns = cached_data.get("synonyms", [])
             ants = cached_data.get("antonyms", [])
             
-            # Gán ngẫu nhiên giữa 7 chế độ câu hỏi
             if word not in self.synonyms_cache or "source" not in cached_data or syns or ants:
                 item["quiz_type"] = random.choice([
                     "flashcard", 
@@ -345,7 +361,6 @@ class ReviewTab(ft.Column):
             if not queue_words:
                 return False
             
-            # Xây lại review_queue từ danh sách từ đã lưu, giữ nguyên thứ tự
             word_to_item = {item["word"]: item for item in self.vocab_list}
             self.review_queue = []
             for w in queue_words:
@@ -357,7 +372,6 @@ class ReviewTab(ft.Column):
             if not self.review_queue:
                 return False
             
-            # Đọc vị trí current_index đã lưu chính xác từ session
             self.current_index = session.get("current_index", 0)
             if self.current_index >= len(self.review_queue):
                 self.current_index = len(self.review_queue)
@@ -368,12 +382,33 @@ class ReviewTab(ft.Column):
         
     def update_progress_ui(self):
         total = len(self.review_queue)
+        
+        # Đếm số từ còn lại cho 3 thẻ Anki: New, Learn, Review
+        new_cnt = 0
+        learn_cnt = 0
+        review_cnt = 0
+        
+        for item in self.review_queue[self.current_index:]:
+            w = item["word"]
+            srs_entry = self.srs_data.get(w, {})
+            state = srs_entry.get("state", "new" if "repetitions" not in srs_entry else "review")
+            if w not in self.srs_data or state == "new":
+                new_cnt += 1
+            elif state == "learning":
+                learn_cnt += 1
+            else:
+                review_cnt += 1
+                
+        self.badge_new.content.value = f"🔵 New: {new_cnt}"
+        self.badge_learn.content.value = f"🟠 Learn: {learn_cnt}"
+        self.badge_review.content.value = f"🟢 Review: {review_cnt}"
+        
         if total == 0:
             self.progress_bar.value = 0
             self.lbl_progress.value = "All caught up! 🎉 No words to review today."
         else:
-            self.progress_bar.value = self.current_index / total
-            self.lbl_progress.value = f"Reviewing: {self.current_index + 1}/{total} words"
+            self.progress_bar.value = min(1.0, self.current_index / total)
+            self.lbl_progress.value = f"Progress: {self.current_index}/{total} cards reviewed today"
 
     def show_current_card(self):
         self.word_card.reveal_translation(False)
@@ -739,20 +774,12 @@ class ReviewTab(ft.Column):
         self.btn_open_notion.visible = True
         self.btn_view_details.visible = True
         
-        # Calculate intervals
+        # Calculate Anki interval previews
         word = self.review_queue[self.current_index]["word"]
-        item_srs = self.srs_data.get(word, {"ease_factor": 2.5, "repetitions": 0, "interval": 1})
-        ef = item_srs["ease_factor"]
-        rep = item_srs["repetitions"]
-        
-        if rep == 0:
-            day_easy = 4
-        elif rep == 1:
-            day_easy = 6
-        else:
-            day_easy = int(round(item_srs["interval"] * ef))
+        item_srs = self.srs_data.get(word, {})
+        previews = calculate_anki_previews(item_srs)
             
-        self.srs_buttons.set_ratings(day_easy)
+        self.srs_buttons.set_ratings(previews)
         self.srs_buttons.show_buttons(True)
         self.page_ref.update()
 
@@ -857,16 +884,26 @@ class ReviewTab(ft.Column):
     def handle_srs_rating(self, quality):
         if not self.review_queue or self.current_index >= len(self.review_queue):
             return
-        word = self.review_queue[self.current_index]["word"]
         
-        # Update spacing schedule
-        self.srs_data = update_srs_item(self.srs_data, word, quality)
+        current_item = self.review_queue[self.current_index]
+        word = current_item["word"]
+        
+        # Update spacing schedule (Anki steps + FSRS)
+        self.srs_data, graduated = update_srs_item(self.srs_data, word, quality)
         self.save_srs_data_fn(self.srs_data)
         
-        # Next card
+        # Nếu thẻ chưa tốt nghiệp (bấm Again 1m hoặc Hard 10m trên từ mới/đang học hoặc Again trên review card):
+        # Chèn lại từ này vào phía sau trong phiên học hôm nay để người học gặp lại trong phiên
+        if not graduated:
+            insert_pos = min(len(self.review_queue), self.current_index + 4)
+            self.review_queue.insert(insert_pos, current_item)
+        
+        # Chuyển sang thẻ tiếp theo
         self.current_index += 1
         
-        # Lưu tiến trình session để phục hồi khi restart
-        self.save_session(datetime.date.today().isoformat())
+        # Lưu tiến trình session
+        today = datetime.date.today().isoformat()
+        self.save_session(today)
         
+        self.update_progress_ui()
         self.show_current_card()
